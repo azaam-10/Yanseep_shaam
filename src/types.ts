@@ -18,4 +18,5 @@ export interface User {
   name: string;
   balance: number;
   tickets: Ticket[];
+  isFrozen?: boolean;
 }

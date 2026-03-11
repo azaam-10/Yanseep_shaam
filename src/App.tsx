@@ -32,7 +32,8 @@ import {
   Search,
   Eye,
   Trash2,
-  RotateCcw
+  RotateCcw,
+  Unlock
 } from 'lucide-react';
 import { TICKET_PRICE, PRIZE_TIERS } from './constants';
 import { Ticket, User } from './types';
@@ -274,6 +275,8 @@ function AdminPanel({
   const [ticketEnd, setTicketEnd] = useState('');
   const [ticketLevel, setTicketLevel] = useState('0');
   const [isAddingTickets, setIsAddingTickets] = useState(false);
+  const [isDeletingTickets, setIsDeletingTickets] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // User management state
   const [userSearchEmail, setUserSearchEmail] = useState('');
@@ -283,6 +286,35 @@ function AdminPanel({
 
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userTickets, setUserTickets] = useState<any[]>([]);
+  const [isLoadingUserTickets, setIsLoadingUserTickets] = useState(false);
+
+  const fetchUserTickets = async (userId: string) => {
+    setIsLoadingUserTickets(true);
+    try {
+      const { data, error } = await supabase
+        .from('shop_tickets')
+        .select('*')
+        .eq('owner_id', userId)
+        .eq('is_sold', true);
+      
+      if (error) throw error;
+      console.log('Fetched tickets for user:', data);
+      setUserTickets(data || []);
+    } catch (err) {
+      console.error('Fetch User Tickets Error:', err);
+    } finally {
+      setIsLoadingUserTickets(false);
+    }
+  };
+
+  useEffect(() => {
+    if (foundUser) {
+      fetchUserTickets(foundUser.id);
+    } else {
+      setUserTickets([]);
+    }
+  }, [foundUser]);
 
   useEffect(() => {
     if (activeTab === 'users' && recentUsers.length === 0) {
@@ -296,11 +328,13 @@ function AdminPanel({
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (data) setRecentUsers(data);
-    } catch (err) {
-      console.error(err);
+        .limit(20);
+      
+      if (error) throw error;
+      setRecentUsers(data || []);
+    } catch (err: any) {
+      console.error('Fetch Users Error:', err);
+      addNotification('فشل تحميل قائمة المستخدمين: ' + (err.message || ''), 'error');
     } finally {
       setLoadingUsers(false);
     }
@@ -443,32 +477,68 @@ function AdminPanel({
     }
   };
 
+  const handleDeleteUnsoldTickets = async () => {
+    if (!showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+    
+    setShowDeleteConfirm(false);
+    addNotification('جاري حذف الكروت غير المباعة...');
+    setIsDeletingTickets(true);
+    try {
+      const { error } = await supabase
+        .from('shop_tickets')
+        .delete()
+        .eq('is_sold', false);
+      
+      if (error) throw error;
+      
+      addNotification('تم حذف جميع الكروت غير المباعة بنجاح');
+    } catch (err: any) {
+      console.error('Delete Tickets Error:', err);
+      addNotification('حدث خطأ أثناء حذف الكروت: ' + (err.message || 'خطأ غير معروف'), 'error');
+    } finally {
+      setIsDeletingTickets(false);
+    }
+  };
+
   const handleSearchUser = async () => {
     if (!userSearchEmail) return;
     setIsSearchingUser(true);
     setFoundUser(null);
     try {
+      // Try searching by email first
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', userSearchEmail)
-        .single();
+        .maybeSingle();
       
-      if (error) {
-        // Try searching by first_name if email fails (fallback)
-        const { data: data2, error: error2 } = await supabase
+      if (error) throw error;
+
+      if (data) {
+        setFoundUser(data);
+      } else {
+        // Fallback: search by name
+        const { data: nameData, error: nameError } = await supabase
           .from('profiles')
           .select('*')
-          .ilike('first_name', `%${userSearchEmail}%`)
-          .limit(1);
+          .or(`first_name.ilike.%${userSearchEmail}%,last_name.ilike.%${userSearchEmail}%`)
+          .limit(1)
+          .maybeSingle();
         
-        if (error2 || !data2 || data2.length === 0) throw error;
-        setFoundUser(data2[0]);
-      } else {
-        setFoundUser(data);
+        if (nameError) throw nameError;
+        
+        if (nameData) {
+          setFoundUser(nameData);
+        } else {
+          addNotification('المستخدم غير موجود', 'error');
+        }
       }
-    } catch (err) {
-      addNotification('المستخدم غير موجود', 'error');
+    } catch (err: any) {
+      console.error('Search User Error:', err);
+      addNotification('خطأ في البحث: ' + (err.message || ''), 'error');
     } finally {
       setIsSearchingUser(false);
     }
@@ -489,8 +559,52 @@ function AdminPanel({
       setFoundUser({ ...foundUser, balance: newBalance });
       addNotification('تم تعديل الرصيد بنجاح');
       setAdjustAmount('');
+      fetchRecentUsers();
     } catch (err) {
       addNotification('حدث خطأ أثناء تعديل الرصيد', 'error');
+    }
+  };
+
+  const handleToggleFreeze = async () => {
+    if (!foundUser) return;
+    const newStatus = !foundUser.is_frozen;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_frozen: newStatus })
+        .eq('id', foundUser.id);
+      
+      if (error) throw error;
+      setFoundUser({ ...foundUser, is_frozen: newStatus });
+      addNotification(newStatus ? 'تم تجميد الحساب' : 'تم إلغاء التجميد');
+      fetchRecentUsers();
+    } catch (err) {
+      addNotification('فشل تغيير حالة الحساب', 'error');
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!foundUser) return;
+    if (!window.confirm(`هل أنت متأكد من حذف المستخدم ${foundUser.first_name} نهائياً؟ سيتم حذف جميع بياناته من قاعدة البيانات ونظام المصادقة.`)) return;
+    
+    try {
+      // محاولة حذف المستخدم عبر RPC (الذي يحذف من auth.users و profiles)
+      const { error } = await supabase.rpc('delete_user_completely', { user_id: foundUser.id });
+      
+      if (error) {
+        console.error('RPC Delete Error:', error);
+        // محاولة الحذف اليدوي من الجداول العامة كبديل
+        const { error: profileError } = await supabase.from('profiles').delete().eq('id', foundUser.id);
+        if (profileError) throw profileError;
+      }
+      
+      addNotification('تم حذف المستخدم وجميع بياناته بنجاح');
+      setFoundUser(null);
+      setUserSearchEmail('');
+      fetchRecentUsers();
+    } catch (err: any) {
+      console.error('Delete User Error:', err);
+      addNotification('فشل حذف المستخدم: ' + (err.message || ''), 'error');
     }
   };
 
@@ -665,6 +779,31 @@ function AdminPanel({
                   </>
                 )}
               </button>
+
+              <button 
+                onClick={handleDeleteUnsoldTickets}
+                disabled={isDeletingTickets}
+                className={`w-full font-black py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 ${
+                  showDeleteConfirm 
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
+                    : 'bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20'
+                }`}
+              >
+                {isDeletingTickets ? <Loader2 className="animate-spin w-5 h-5" /> : (
+                  <>
+                    <Trash2 size={16} />
+                    <span>{showDeleteConfirm ? 'تأكيد الحذف النهائي؟' : 'حذف جميع الكروت غير المباعة'}</span>
+                  </>
+                )}
+              </button>
+              {showDeleteConfirm && (
+                <button 
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="w-full text-[10px] text-gray-500 hover:text-white transition-colors"
+                >
+                  إلغاء
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -694,16 +833,79 @@ function AdminPanel({
                 <motion.div 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="pt-4 border-t border-white/10 space-y-4"
+                  className="pt-4 border-t border-white/10 space-y-6"
                 >
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-start">
                     <div className="text-right">
-                      <p className="text-sm font-black text-white">{foundUser.first_name} {foundUser.last_name}</p>
-                      <p className="text-[10px] text-cyan-500 font-bold">الرصيد الحالي: {foundUser.balance} ل.س</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-base font-black text-white">
+                          {foundUser.first_name || foundUser.last_name 
+                            ? `${foundUser.first_name || ''} ${foundUser.last_name || ''}`.trim() 
+                            : 'مستخدم بدون اسم'}
+                        </p>
+                        {foundUser.is_frozen && (
+                          <span className="bg-red-500/20 text-red-500 text-[8px] px-2 py-0.5 rounded-full font-black uppercase">مجمد</span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-500 mb-1">{foundUser.email}</p>
+                      <p className="text-[10px] text-cyan-500 font-bold">الرصيد: {foundUser.balance} ل.س</p>
                     </div>
-                    <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center text-cyan-500">
-                      <UserIcon size={20} />
+                    <button 
+                      onClick={() => setFoundUser(null)}
+                      className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 transition-all text-gray-400"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
+                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">العمر</p>
+                      <p className="text-xs font-bold text-white">{foundUser.age || 'غير محدد'}</p>
                     </div>
+                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
+                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">تاريخ الانضمام</p>
+                      <p className="text-xs font-bold text-white">
+                        {foundUser.created_at ? new Date(foundUser.created_at).toLocaleDateString('ar-SY') : 'غير معروف'}
+                      </p>
+                    </div>
+                    <div className="col-span-2 bg-white/[0.02] border border-white/5 rounded-xl p-3">
+                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">عنوان شام كاش</p>
+                      <p className="text-xs font-bold text-cyan-500 break-all">{foundUser.sham_cash_address || 'لم يتم إدخاله'}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">الكروت المشتراة ({userTickets.length})</h4>
+                      <button 
+                        onClick={() => fetchUserTickets(foundUser.id)}
+                        className="p-1 bg-white/5 rounded hover:bg-white/10 transition-all text-cyan-500"
+                        title="تحديث قائمة الكروت"
+                      >
+                        <RotateCcw size={12} />
+                      </button>
+                    </div>
+                    {isLoadingUserTickets ? (
+                      <div className="flex justify-center py-4"><Loader2 className="animate-spin w-4 h-4 text-cyan-500" /></div>
+                    ) : userTickets.length === 0 ? (
+                      <p className="text-[10px] text-gray-600 text-center py-2 italic">لم يقم بشراء أي كروت بعد</p>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        {userTickets.map(t => (
+                          <div key={t.id} className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg py-1 text-center">
+                            <p className="text-[9px] font-black text-cyan-500">{t.number}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-3">
+                    <p className="text-[8px] text-yellow-500 font-black uppercase tracking-widest mb-1">ملاحظة أمنية</p>
+                    <p className="text-[9px] text-gray-400 leading-relaxed">
+                      كلمات المرور مشفرة ولا يمكن عرضها لأسباب أمنية. إذا نسي المستخدم كلمة المرور، يمكنه استخدام خيار "نسيت كلمة المرور" عند تسجيل الدخول.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -730,6 +932,23 @@ function AdminPanel({
                       </button>
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <button 
+                      onClick={handleToggleFreeze}
+                      className={`flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black transition-all ${foundUser.is_frozen ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-orange-500/10 text-orange-500 border border-orange-500/20'}`}
+                    >
+                      {foundUser.is_frozen ? <Unlock size={14} /> : <Lock size={14} />}
+                      <span>{foundUser.is_frozen ? 'إلغاء التجميد' : 'تجميد الحساب'}</span>
+                    </button>
+                    <button 
+                      onClick={handleDeleteUser}
+                      className="flex items-center justify-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 py-3 rounded-xl text-[10px] font-black hover:bg-red-500/20 transition-all"
+                    >
+                      <Trash2 size={14} />
+                      <span>حذف الحساب</span>
+                    </button>
+                  </div>
                 </motion.div>
               )}
             </div>
@@ -738,19 +957,27 @@ function AdminPanel({
               <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mr-1">آخر المستخدمين المسجلين</h3>
               {loadingUsers ? (
                 <div className="flex justify-center py-10"><Loader2 className="animate-spin text-cyan-500" /></div>
+              ) : recentUsers.length === 0 ? (
+                <div className="bg-white/[0.02] border border-dashed border-white/10 rounded-2xl py-10 text-center">
+                  <p className="text-xs text-gray-500 font-bold">لا يوجد مستخدمين مسجلين حالياً</p>
+                </div>
               ) : (
                 recentUsers.map(u => (
                   <button 
                     key={u.id}
                     onClick={() => {
                       setFoundUser(u);
-                      setUserSearchEmail(u.email);
+                      setUserSearchEmail(u.email || '');
                     }}
                     className="w-full bg-white/[0.02] border border-white/5 rounded-xl p-3 flex items-center justify-between hover:bg-white/[0.05] transition-all"
                   >
                     <div className="text-right">
-                      <p className="text-xs font-bold text-white">{u.first_name} {u.last_name}</p>
-                      <p className="text-[9px] text-gray-500">{u.email}</p>
+                      <p className="text-xs font-bold text-white">
+                        {u.first_name || u.last_name 
+                          ? `${u.first_name || ''} ${u.last_name || ''}`.trim() 
+                          : 'مستخدم بدون اسم'}
+                      </p>
+                      <p className="text-[9px] text-gray-500">{u.email || 'لا يوجد بريد'}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] text-cyan-500 font-bold">{u.balance} ل.س</p>
@@ -761,6 +988,7 @@ function AdminPanel({
             </div>
           </div>
         )}
+
         {activeTab === 'settings' && (
           <div className="space-y-6">
             <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-4">
@@ -818,6 +1046,7 @@ export default function App() {
   const [realNotifications, setRealNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isPurchasing, setIsPurchasing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -881,14 +1110,18 @@ export default function App() {
 
       if (profileData) {
         const metadata = supabaseUser.user_metadata;
-        const fullName = metadata?.first_name && metadata?.last_name 
-          ? `${metadata.first_name} ${metadata.last_name}`
-          : (profileData.first_name && profileData.last_name ? `${profileData.first_name} ${profileData.last_name}` : (supabaseUser.email?.split('@')[0] || 'مستخدم جديد'));
+        // Prioritize profile table data over auth metadata for consistency
+        const fullName = profileData.first_name && profileData.last_name 
+          ? `${profileData.first_name} ${profileData.last_name}`
+          : (metadata?.first_name && metadata?.last_name 
+              ? `${metadata.first_name} ${metadata.last_name}`
+              : (supabaseUser.email?.split('@')[0] || 'مستخدم'));
 
         setUser({
           id: supabaseUser.id,
           name: fullName,
           balance: profileData.balance || 0,
+          isFrozen: profileData.is_frozen || false,
           tickets: (ticketsData || []).map(t => ({
             id: t.id,
             number: t.number,
@@ -968,7 +1201,7 @@ export default function App() {
       window.removeEventListener('touchend', handleTouchEnd);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [supabaseUser, shopTickets]); // Refresh when tickets are bought
+  }, [supabaseUser]); // Only refresh when user changes, not on every shop ticket update
 
   // Fetch Winners
   useEffect(() => {
@@ -1124,6 +1357,9 @@ export default function App() {
               sold: payload.new.is_sold
             }].sort((a, b) => a.number.localeCompare(b.number));
           });
+        } else if (payload.eventType === 'DELETE') {
+          setTotalLevelTickets(prev => Math.max(0, prev - 1));
+          setShopTickets(prev => prev.filter(t => t.id !== payload.old.id));
         }
       })
       .subscribe();
@@ -1213,58 +1449,118 @@ export default function App() {
   }, [showMachine, isDrawing, drawnWinners, startDraw]);
 
   const buyTicket = async (forcedNumber?: string) => {
+    if (isPurchasing) return false;
+    
     if (!supabaseUser) {
       addNotification('يرجى تسجيل الدخول لشراء الكروت', 'error');
       setShowAuthModal(true);
       return false;
     }
 
-    if (user.balance < TICKET_PRICE) {
-      addNotification('عذراً، رصيدك غير كافٍ لشراء الكرت', 'error');
-      return false;
-    }
-
-    const ticketNumber = forcedNumber || (shopTickets.find(t => !t.sold)?.number);
-    
-    if (!ticketNumber) {
-      addNotification('عذراً، لا توجد كروت متاحة حالياً', 'error');
-      return false;
-    }
+    setIsPurchasing(true);
 
     try {
-      // 1. Update ticket in Supabase
-      const { error: ticketError } = await supabase
+      // 1. Fetch latest profile data to ensure we have the correct balance
+      const { data: currentProfile, error: profileFetchError } = await supabase
+        .from('profiles')
+        .select('is_frozen, balance')
+        .eq('id', supabaseUser.id)
+        .single();
+
+      if (profileFetchError || !currentProfile) {
+        throw new Error('فشل في جلب بيانات الحساب');
+      }
+
+      if (currentProfile.is_frozen) {
+        addNotification('عذراً، حسابك مجمد حالياً ولا يمكنك شراء الكروت. يرجى التواصل مع الإدارة.', 'error');
+        return false;
+      }
+
+      const currentBalance = Number(currentProfile.balance) || 0;
+
+      if (currentBalance < TICKET_PRICE) {
+        addNotification('عذراً، رصيدك غير كافٍ لشراء الكرت', 'error');
+        return false;
+      }
+
+      const ticketNumber = forcedNumber || (shopTickets.find(t => !t.sold)?.number);
+      
+      if (!ticketNumber) {
+        addNotification('عذراً، لا توجد كروت متاحة حالياً', 'error');
+        return false;
+      }
+
+      // 2. تحديث الكرت في قاعدة البيانات مع التحقق من أنه لم يتم بيعه
+      // نستخدم count: 'exact' للتحقق من نجاح التحديث لأن select() قد تفشل مع المستخدمين العاديين بسبب RLS
+      const { count, error: ticketError } = await supabase
         .from('shop_tickets')
         .update({ 
           is_sold: true, 
           owner_id: supabaseUser.id 
-        })
+        }, { count: 'exact' })
         .eq('number', ticketNumber)
-        .eq('is_sold', false); // Safety check: only if not already sold
+        .eq('is_sold', false);
 
-      if (ticketError) throw ticketError;
+      if (ticketError) {
+        console.error('Ticket Update Error:', ticketError);
+        throw ticketError;
+      }
+      
+      if (count === 0) {
+        // إذا لم يتم تحديث أي صف، فهذا يعني إما أن الكرت بيع بالفعل أو أن هناك مشكلة في الصلاحيات
+        addNotification('عذراً، هذا الكرت لم يعد متاحاً أو تم شراؤه بالفعل', 'error');
+        
+        // محاولة جلب الحالة الحقيقية للكرت للتأكد
+        const { data: checkTicket } = await supabase
+          .from('shop_tickets')
+          .select('is_sold')
+          .eq('number', ticketNumber)
+          .single();
+          
+        if (checkTicket?.is_sold) {
+          addNotification('تأكيد: الكرت مباع بالفعل لمستخدم آخر', 'error');
+        } else {
+          addNotification('تنبيه: قد تكون هناك مشكلة في صلاحيات الشراء، يرجى التواصل مع المسؤول', 'error');
+        }
 
-      // 2. Update user balance in profiles
-      const { error: balanceError } = await supabase
+        // Refresh tickets list
+        const { data: freshTickets } = await supabase
+          .from('shop_tickets')
+          .select('id, number, is_sold')
+          .eq('level_index', currentLevelIndex)
+          .limit(displayLimit);
+        
+        if (freshTickets) {
+          setShopTickets(freshTickets.map(t => ({ id: t.id, number: t.number, sold: t.is_sold })));
+        }
+        return false;
+      }
+
+      // 3. خصم الرصيد من قاعدة البيانات
+      const newBalance = currentBalance - TICKET_PRICE;
+      const { data: updatedProfile, error: balanceError } = await supabase
         .from('profiles')
-        .update({ balance: user.balance - TICKET_PRICE })
-        .eq('id', supabaseUser.id);
+        .update({ balance: newBalance })
+        .eq('id', supabaseUser.id)
+        .select();
 
       if (balanceError) throw balanceError;
 
-      // 3. Update local state
+      const actualNewBalance = updatedProfile?.[0]?.balance ?? newBalance;
+
+      // 4. Update local state
       const newTicket: Ticket = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substr(2, 9), // سنستخدم ID عشوائي مؤقت هنا
         number: ticketNumber,
         purchaseDate: new Date().toISOString().split('T')[0],
         status: 'active'
       };
 
-      setUser({
-        ...user,
-        balance: user.balance - TICKET_PRICE,
-        tickets: [newTicket, ...user.tickets]
-      });
+      setUser(prev => ({
+        ...prev,
+        balance: actualNewBalance,
+        tickets: [newTicket, ...prev.tickets]
+      }));
 
       // 4. Add real notification to panel
       await supabase.from('notifications').insert({
@@ -1281,6 +1577,8 @@ export default function App() {
       console.error('Purchase error:', error);
       addNotification('حدث خطأ أثناء عملية الشراء، يرجى المحاولة مرة أخرى', 'error');
       return false;
+    } finally {
+      setTimeout(() => setIsPurchasing(false), 800);
     }
   };
 
@@ -1791,6 +2089,7 @@ export default function App() {
                 </div>
               </div>
               <button 
+                disabled={isPurchasing}
                 onClick={async () => {
                   const available = shopTickets.filter(t => !t.sold);
                   if (available.length > 0) {
@@ -1800,9 +2099,13 @@ export default function App() {
                     }
                   }
                 }}
-                className="bg-cyan-500 text-black px-4 py-2 rounded-xl font-black text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all"
+                className={`px-4 py-2 rounded-xl font-black text-xs shadow-lg transition-all active:scale-95 ${
+                  isPurchasing 
+                    ? 'bg-gray-700 text-gray-400 cursor-wait' 
+                    : 'bg-cyan-500 text-black shadow-cyan-500/20'
+                }`}
               >
-                شراء عشوائي
+                {isPurchasing ? 'جاري الشراء...' : 'شراء عشوائي'}
               </button>
             </div>
 
@@ -1950,7 +2253,7 @@ export default function App() {
               {shopTickets.map((ticket) => (
                 <button 
                   key={ticket.id}
-                  disabled={ticket.sold}
+                  disabled={ticket.sold || isPurchasing}
                   onClick={async () => {
                     if (await buyTicket(ticket.number)) {
                       setShopTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, sold: true } : t));
@@ -1959,7 +2262,9 @@ export default function App() {
                   className={`relative aspect-square rounded-lg border flex flex-col items-center justify-center transition-all active:scale-90 ${
                     ticket.sold 
                       ? 'bg-white/5 border-white/5 opacity-40 cursor-not-allowed' 
-                      : 'bg-[#1a1c20] border-white/10 hover:border-cyan-500/50'
+                      : isPurchasing 
+                        ? 'bg-white/5 border-white/5 opacity-40 cursor-wait'
+                        : 'bg-[#1a1c20] border-white/10 hover:border-cyan-500/50'
                   }`}
                 >
                   <span className="text-[8px] font-mono font-bold">{ticket.number}</span>
