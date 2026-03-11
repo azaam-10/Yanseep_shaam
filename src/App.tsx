@@ -26,7 +26,13 @@ import {
   LogOut,
   Mail,
   Lock,
-  Loader2
+  Loader2,
+  ShieldCheck,
+  Plus,
+  Search,
+  Eye,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import { TICKET_PRICE, PRIZE_TIERS } from './constants';
 import { Ticket, User } from './types';
@@ -60,7 +66,8 @@ function AuthForm({ onSuccess, addNotification }: { onSuccess: () => void, addNo
               first_name: firstName,
               last_name: lastName,
               age: parseInt(age),
-              sham_cash_address: shamCash
+              sham_cash_address: shamCash,
+              email: email
             }
           }
         });
@@ -219,18 +226,583 @@ function AuthForm({ onSuccess, addNotification }: { onSuccess: () => void, addNo
   );
 }
 
+function AdminPanel({ 
+  onClose, 
+  requests, 
+  onRefresh, 
+  addNotification 
+}: { 
+  onClose: () => void, 
+  requests: any[], 
+  onRefresh: () => void,
+  addNotification: (t: string, type?: 'success' | 'error') => void
+}) {
+  const [activeTab, setActiveTab] = useState<'requests' | 'tickets' | 'users' | 'settings'>('requests');
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rechargeAmount, setRechargeAmount] = useState<string>('');
+  const [isInitializingStorage, setIsInitializingStorage] = useState(false);
+  
+  const initializeStorage = async () => {
+    setIsInitializingStorage(true);
+    try {
+      // Attempt to create the bucket
+      const { error } = await supabase.storage.createBucket('receipts', {
+        public: true,
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg'],
+        fileSizeLimit: 5242880 // 5MB
+      });
+      
+      if (error) {
+        if (error.message.includes('already exists')) {
+          addNotification('مخزن الصور موجود بالفعل');
+        } else {
+          throw error;
+        }
+      } else {
+        addNotification('تم إنشاء مخزن الصور "receipts" بنجاح');
+      }
+    } catch (err: any) {
+      console.error('Storage Init Error:', err);
+      addNotification('فشل الإنشاء التلقائي. يرجى إنشاء مخزن باسم receipts يدوياً في Supabase', 'error');
+    } finally {
+      setIsInitializingStorage(false);
+    }
+  };
+  
+  // Ticket management state
+  const [ticketStart, setTicketStart] = useState('');
+  const [ticketEnd, setTicketEnd] = useState('');
+  const [ticketLevel, setTicketLevel] = useState('0');
+  const [isAddingTickets, setIsAddingTickets] = useState(false);
+
+  // User management state
+  const [userSearchEmail, setUserSearchEmail] = useState('');
+  const [foundUser, setFoundUser] = useState<any>(null);
+  const [adjustAmount, setAdjustAmount] = useState('');
+  const [isSearchingUser, setIsSearchingUser] = useState(false);
+
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'users' && recentUsers.length === 0) {
+      fetchRecentUsers();
+    }
+  }, [activeTab]);
+
+  const fetchRecentUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (data) setRecentUsers(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleApprove = async (requestId: string, userId: string) => {
+    if (!rechargeAmount || isNaN(Number(rechargeAmount))) {
+      addNotification('يرجى إدخال مبلغ صحيح', 'error');
+      return;
+    }
+    setProcessingId(requestId);
+    try {
+      const amount = Number(rechargeAmount);
+      
+      // Use a single RPC call for atomicity if available, or sequential updates
+      // Here we stick to sequential for simplicity unless we are sure RPC exists, 
+      // but I will provide the RPC SQL to the user.
+      
+      // 1. Update user balance (using increment logic if possible, but here we fetch latest)
+      const { data: profileData, error: fetchError } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', userId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      const newBalance = (profileData?.balance || 0) + amount;
+
+      const { error: balanceError } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance })
+        .eq('id', userId);
+      
+      if (balanceError) throw balanceError;
+
+      // 2. Update request status
+      const { error: requestError } = await supabase
+        .from('recharge_requests')
+        .update({ status: 'approved', processed_amount: amount })
+        .eq('id', requestId);
+      
+      if (requestError) throw requestError;
+
+      addNotification(`تم شحن ${amount} ل.س بنجاح`);
+      setRechargeAmount('');
+      onRefresh();
+    } catch (err: any) {
+      console.error('Approve Error:', err);
+      addNotification('حدث خطأ أثناء المعالجة: ' + (err.message || ''), 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    if (!window.confirm('هل أنت متأكد من رفض هذا الطلب؟')) return;
+    
+    setProcessingId(requestId);
+    try {
+      const { error } = await supabase
+        .from('recharge_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId);
+      
+      if (error) throw error;
+      addNotification('تم رفض الطلب بنجاح');
+      onRefresh();
+    } catch (err: any) {
+      console.error('Reject Error:', err);
+      addNotification('حدث خطأ أثناء الرفض', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleAddTickets = async () => {
+    const start = parseInt(ticketStart);
+    const end = parseInt(ticketEnd);
+    const level = parseInt(ticketLevel);
+    if (isNaN(start) || isNaN(end) || start > end) {
+      addNotification('يرجى إدخال نطاق أرقام صحيح', 'error');
+      return;
+    }
+    
+    addNotification('جاري تحديث الكروت...');
+    setIsAddingTickets(true);
+    try {
+      // 1. جلب أرقام الكروت المباعة حالياً في هذا المستوى لتجنب تكرارها
+      const { data: soldTickets } = await supabase
+        .from('shop_tickets')
+        .select('number')
+        .eq('level_index', level)
+        .eq('is_sold', true);
+      
+      const soldNumbers = new Set(soldTickets?.map(t => t.number) || []);
+
+      // 2. مسح الكروت *غير المباعة* فقط لهذا المستوى
+      const { error: deleteError } = await supabase
+        .from('shop_tickets')
+        .delete()
+        .eq('level_index', level)
+        .eq('is_sold', false);
+      
+      if (deleteError) throw deleteError;
+
+      // 3. تجهيز الكروت الجديدة (مع تخطي الأرقام المباعة بالفعل)
+      const tickets = [];
+      for (let i = start; i <= end; i++) {
+        const num = i.toString().padStart(6, '0');
+        if (!soldNumbers.has(num)) {
+          tickets.push({
+            number: num,
+            level_index: level,
+            is_sold: false
+          });
+        }
+      }
+      
+      // 4. الإضافة على دفعات
+      if (tickets.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < tickets.length; i += batchSize) {
+          const batch = tickets.slice(i, i + batchSize);
+          const { error } = await supabase.from('shop_tickets').insert(batch);
+          if (error) {
+            console.error('Insert Error:', error);
+            throw error;
+          }
+        }
+      }
+      
+      addNotification(`تم تحديث الكروت بنجاح (تم إضافة ${tickets.length} كرت جديد)`);
+      setTicketStart('');
+      setTicketEnd('');
+    } catch (err: any) {
+      console.error('Add Tickets Error:', err);
+      addNotification('حدث خطأ أثناء تحديث الكروت', 'error');
+    } finally {
+      setIsAddingTickets(false);
+    }
+  };
+
+  const handleSearchUser = async () => {
+    if (!userSearchEmail) return;
+    setIsSearchingUser(true);
+    setFoundUser(null);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', userSearchEmail)
+        .single();
+      
+      if (error) {
+        // Try searching by first_name if email fails (fallback)
+        const { data: data2, error: error2 } = await supabase
+          .from('profiles')
+          .select('*')
+          .ilike('first_name', `%${userSearchEmail}%`)
+          .limit(1);
+        
+        if (error2 || !data2 || data2.length === 0) throw error;
+        setFoundUser(data2[0]);
+      } else {
+        setFoundUser(data);
+      }
+    } catch (err) {
+      addNotification('المستخدم غير موجود', 'error');
+    } finally {
+      setIsSearchingUser(false);
+    }
+  };
+
+  const handleAdjustBalance = async (type: 'add' | 'subtract') => {
+    if (!foundUser || !adjustAmount || isNaN(Number(adjustAmount))) return;
+    const amount = Number(adjustAmount);
+    const newBalance = type === 'add' ? foundUser.balance + amount : foundUser.balance - amount;
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance })
+        .eq('id', foundUser.id);
+      
+      if (error) throw error;
+      setFoundUser({ ...foundUser, balance: newBalance });
+      addNotification('تم تعديل الرصيد بنجاح');
+      setAdjustAmount('');
+    } catch (err) {
+      addNotification('حدث خطأ أثناء تعديل الرصيد', 'error');
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full" dir="rtl">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center text-black">
+            <ShieldCheck size={24} />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-white">لوحة التحكم</h2>
+            <p className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest">Admin Control Center</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={() => {
+              onRefresh();
+              if (activeTab === 'users') fetchRecentUsers();
+              addNotification('تم تحديث البيانات');
+            }} 
+            className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-cyan-500"
+            title="تحديث البيانات"
+          >
+            <RotateCcw size={20} />
+          </button>
+          <button onClick={onClose} className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
+            <X size={20} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex border-b border-white/10 mb-6">
+        <button 
+          onClick={() => setActiveTab('requests')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'requests' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
+        >
+          الطلبات ({requests.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('tickets')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tickets' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
+        >
+          الكروت
+        </button>
+        <button 
+          onClick={() => setActiveTab('users')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'users' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
+        >
+          المستخدمين
+        </button>
+        <button 
+          onClick={() => setActiveTab('settings')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'settings' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
+        >
+          الإعدادات
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+        {activeTab === 'requests' && (
+          <div className="space-y-4">
+            {requests.length === 0 ? (
+              <div className="py-20 text-center text-gray-500 text-xs font-bold">لا توجد طلبات معلقة حالياً</div>
+            ) : (
+              requests.map((req) => (
+                <div key={req.id} className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-white">{req.profiles?.first_name} {req.profiles?.last_name || 'مستخدم'}</p>
+                      <p className="text-[10px] text-gray-500">{req.user_email}</p>
+                      <p className="text-[10px] text-cyan-500 font-bold mt-1">الرصيد: {req.profiles?.balance || 0} ل.س</p>
+                    </div>
+                    <div className="text-[9px] text-gray-500 font-mono">
+                      {new Date(req.created_at).toLocaleTimeString('ar-SY')}
+                    </div>
+                  </div>
+
+                  {req.receipt_url && (
+                    <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/40">
+                      <img src={req.receipt_url} alt="Receipt" className="w-full h-40 object-contain" />
+                      <a 
+                        href={req.receipt_url} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all"
+                      >
+                        <Eye className="text-white" size={24} />
+                      </a>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="المبلغ المراد شحنه"
+                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-cyan-500 transition-all"
+                      onChange={(e) => setRechargeAmount(e.target.value)}
+                    />
+                    <button 
+                      onClick={() => handleApprove(req.id, req.user_id)}
+                      disabled={processingId === req.id}
+                      className="bg-cyan-500 text-black font-black px-4 py-2 rounded-xl text-[10px] hover:bg-cyan-400 transition-all disabled:opacity-50"
+                    >
+                      {processingId === req.id ? <Loader2 className="animate-spin w-4 h-4" /> : 'موافقة'}
+                    </button>
+                    <button 
+                      onClick={() => handleReject(req.id)}
+                      disabled={processingId === req.id}
+                      className="bg-red-500/10 text-red-500 border border-red-500/20 font-black px-4 py-2 rounded-xl text-[10px] hover:bg-red-500/20 transition-all disabled:opacity-50"
+                    >
+                      رفض
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'tickets' && (
+          <div className="space-y-6">
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-widest">توليد كروت جديدة</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">من رقم</label>
+                  <input 
+                    type="number" 
+                    value={ticketStart}
+                    onChange={(e) => setTicketStart(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 text-xs outline-none focus:border-cyan-500 transition-all"
+                    placeholder="1"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">إلى رقم</label>
+                  <input 
+                    type="number" 
+                    value={ticketEnd}
+                    onChange={(e) => setTicketEnd(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 text-xs outline-none focus:border-cyan-500 transition-all"
+                    placeholder="100"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">المستوى</label>
+                <select 
+                  value={ticketLevel}
+                  onChange={(e) => setTicketLevel(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 text-xs outline-none focus:border-cyan-500 transition-all appearance-none"
+                >
+                  <option value="0">برونز 1 (1000 كرت)</option>
+                  <option value="1">برونز 2 (2000 كرت)</option>
+                  <option value="2">برونز 3 (3000 كرت)</option>
+                  <option value="3">سيلفر 1 (5000 كرت)</option>
+                  <option value="4">سيلفر 2 (10000 كرت)</option>
+                  <option value="5">جولد 1 (20000 كرت)</option>
+                </select>
+              </div>
+              <button 
+                onClick={handleAddTickets}
+                disabled={isAddingTickets}
+                className="w-full bg-cyan-500 text-black font-black py-3.5 rounded-xl text-xs shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all flex items-center justify-center gap-2"
+              >
+                {isAddingTickets ? <Loader2 className="animate-spin w-5 h-5" /> : (
+                  <>
+                    <Plus size={16} />
+                    <span>إضافة الكروت إلى المتجر</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <div className="space-y-6">
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-widest">البحث عن مستخدم</h3>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={userSearchEmail}
+                  onChange={(e) => setUserSearchEmail(e.target.value)}
+                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-cyan-500 transition-all"
+                  placeholder="البريد الإلكتروني أو الاسم"
+                />
+                <button 
+                  onClick={handleSearchUser}
+                  disabled={isSearchingUser}
+                  className="bg-white/5 p-2.5 rounded-xl hover:bg-white/10 transition-all border border-white/5"
+                >
+                  {isSearchingUser ? <Loader2 className="animate-spin w-5 h-5" /> : <Search size={18} />}
+                </button>
+              </div>
+
+              {foundUser && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="pt-4 border-t border-white/10 space-y-4"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="text-right">
+                      <p className="text-sm font-black text-white">{foundUser.first_name} {foundUser.last_name}</p>
+                      <p className="text-[10px] text-cyan-500 font-bold">الرصيد الحالي: {foundUser.balance} ل.س</p>
+                    </div>
+                    <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center text-cyan-500">
+                      <UserIcon size={20} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">تعديل الرصيد</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="number" 
+                        value={adjustAmount}
+                        onChange={(e) => setAdjustAmount(e.target.value)}
+                        className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-cyan-500 transition-all"
+                        placeholder="المبلغ"
+                      />
+                      <button 
+                        onClick={() => handleAdjustBalance('add')}
+                        className="bg-green-500/10 text-green-500 border border-green-500/20 font-black px-4 py-2 rounded-xl text-[10px] hover:bg-green-500/20 transition-all"
+                      >
+                        إضافة
+                      </button>
+                      <button 
+                        onClick={() => handleAdjustBalance('subtract')}
+                        className="bg-red-500/10 text-red-500 border border-red-500/20 font-black px-4 py-2 rounded-xl text-[10px] hover:bg-red-500/20 transition-all"
+                      >
+                        خصم
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mr-1">آخر المستخدمين المسجلين</h3>
+              {loadingUsers ? (
+                <div className="flex justify-center py-10"><Loader2 className="animate-spin text-cyan-500" /></div>
+              ) : (
+                recentUsers.map(u => (
+                  <button 
+                    key={u.id}
+                    onClick={() => {
+                      setFoundUser(u);
+                      setUserSearchEmail(u.email);
+                    }}
+                    className="w-full bg-white/[0.02] border border-white/5 rounded-xl p-3 flex items-center justify-between hover:bg-white/[0.05] transition-all"
+                  >
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-white">{u.first_name} {u.last_name}</p>
+                      <p className="text-[9px] text-gray-500">{u.email}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-cyan-500 font-bold">{u.balance} ل.س</p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-4">
+              <h3 className="text-xs font-black text-white uppercase tracking-widest">إعدادات النظام</h3>
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                إذا كنت تواجه مشاكل في رفع الصور، يمكنك محاولة تهيئة مخزن الصور تلقائياً من هنا.
+              </p>
+              <button 
+                onClick={initializeStorage}
+                disabled={isInitializingStorage}
+                className="w-full bg-white/5 border border-white/10 text-white font-black py-3 rounded-xl text-[10px] hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+              >
+                {isInitializingStorage ? <Loader2 className="animate-spin w-4 h-4" /> : <Upload size={14} />}
+                تهيئة مخزن الصور (Receipts Bucket)
+              </button>
+            </div>
+
+            <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-5 space-y-3">
+              <h3 className="text-xs font-black text-red-500 uppercase tracking-widest">ملاحظة هامة</h3>
+              <p className="text-[10px] text-gray-400 leading-relaxed">
+                في حال فشل الزر أعلاه، يجب عليك الدخول إلى لوحة تحكم Supabase وإنشاء Bucket باسم <span className="text-white font-mono">receipts</span> وجعله <span className="text-white">Public</span>.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User>({
-    id: '1',
-    name: 'أحمد المحمد',
-    balance: 2500,
-    tickets: [
-      { id: 't1', number: '849201', purchaseDate: '2024-03-01', status: 'active' },
-      { id: 't2', number: '110293', purchaseDate: '2024-03-05', status: 'active' },
-    ]
+    id: 'guest',
+    name: 'زائر',
+    balance: 0,
+    tickets: []
   });
 
+  const [winners, setWinners] = useState<{name: string, amount: number, ticket: string, rank: number}[]>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'shop' | 'tickets' | 'winners' | 'profile'>('home');
+  const [ticketFilter, setTicketFilter] = useState<'all' | 'active' | 'winner' | 'expired'>('all');
+  const [ticketSort, setTicketSort] = useState<'date-desc' | 'date-asc'>('date-desc');
   const [showDevGuide, setShowDevGuide] = useState(false);
   const [showMachine, setShowMachine] = useState(false);
   const [showRecharge, setShowRecharge] = useState(false);
@@ -243,8 +815,24 @@ export default function App() {
   const [rechargeReceipt, setRechargeReceipt] = useState<File | null>(null);
   const [rechargeStatus, setRechargeStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
   const [notifications, setNotifications] = useState<{id: string, text: string, type: 'success' | 'error'}[]>([]);
+  const [realNotifications, setRealNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [shopTickets, setShopTickets] = useState<{id: string, number: string, sold: boolean}[]>([]);
+  const [totalLevelTickets, setTotalLevelTickets] = useState(0);
+  const [soldLevelTickets, setSoldLevelTickets] = useState(0);
+  const [displayLimit, setDisplayLimit] = useState(100);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [adminRequests, setAdminRequests] = useState<any[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+  const ADMIN_EMAILS = ['azaamazeez8876@gmail.com', 'rwanatiya3@gmail.com'];
+  const isAdmin = supabaseUser?.email && ADMIN_EMAILS.includes(supabaseUser.email);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -260,21 +848,147 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const fetchProfileData = async () => {
+      if (!supabaseUser) return;
+      
+      // 1. Fetch Profile & Balance
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', supabaseUser.id)
+        .single();
+        
+      // 2. Fetch User Tickets (Limited to 50 for summary)
+      const { data: ticketsData } = await supabase
+        .from('shop_tickets')
+        .select('id, number, created_at, is_sold')
+        .eq('owner_id', supabaseUser.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      // 3. Fetch Notifications
+      const { data: notifsData } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', supabaseUser.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (notifsData) {
+        setRealNotifications(notifsData);
+        setUnreadCount(notifsData.filter(n => !n.is_read).length);
+      }
+
+      if (profileData) {
+        const metadata = supabaseUser.user_metadata;
+        const fullName = metadata?.first_name && metadata?.last_name 
+          ? `${metadata.first_name} ${metadata.last_name}`
+          : (profileData.first_name && profileData.last_name ? `${profileData.first_name} ${profileData.last_name}` : (supabaseUser.email?.split('@')[0] || 'مستخدم جديد'));
+
+        setUser({
+          id: supabaseUser.id,
+          name: fullName,
+          balance: profileData.balance || 0,
+          tickets: (ticketsData || []).map(t => ({
+            id: t.id,
+            number: t.number,
+            purchaseDate: new Date(t.created_at).toISOString().split('T')[0],
+            status: t.is_sold ? 'active' : 'expired' // Simplified logic
+          }))
+        });
+      }
+    };
+
+    const handleRefresh = async () => {
+      setIsRefreshing(true);
+      await fetchProfileData();
+      // Also refresh winners and shop tickets
+      const { data: winnersData } = await supabase
+        .from('winners')
+        .select('*')
+        .order('rank', { ascending: true });
+      
+      if (winnersData) {
+        setWinners(winnersData.map(w => ({
+          name: w.user_name,
+          amount: w.amount,
+          ticket: w.ticket_number,
+          rank: w.rank
+        })));
+      }
+      
+      setIsRefreshing(false);
+    };
+
+    fetchProfileData();
+
+    // 4. Real-time notifications subscription
+    let channel: any = null;
     if (supabaseUser) {
-      setUser(prev => ({
-        ...prev,
-        id: supabaseUser.id,
-        name: supabaseUser.email?.split('@')[0] || 'مستخدم جديد',
-      }));
-    } else {
-      setUser({
-        id: 'guest',
-        name: 'زائر',
-        balance: 0,
-        tickets: []
-      });
+      channel = supabase
+        .channel(`user-notifs-${supabaseUser.id}`)
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'notifications',
+          filter: `user_id=eq.${supabaseUser.id}`
+        }, (payload) => {
+          setRealNotifications(prev => [payload.new, ...prev]);
+          setUnreadCount(prev => prev + 1);
+          playSound('recharge');
+        })
+        .subscribe();
     }
-  }, [supabaseUser]);
+
+    // Pull to refresh listener
+    let startY = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      if (window.scrollY === 0) startY = e.touches[0].pageY;
+    };
+    const handleTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0].pageY;
+      if (window.scrollY === 0 && y > startY + 50) {
+        // Simple visual feedback could be added here
+      }
+    };
+    const handleTouchEnd = (e: TouchEvent) => {
+      const y = e.changedTouches[0].pageY;
+      if (window.scrollY === 0 && y > startY + 100) {
+        handleRefresh();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [supabaseUser, shopTickets]); // Refresh when tickets are bought
+
+  // Fetch Winners
+  useEffect(() => {
+    const fetchWinners = async () => {
+      const { data } = await supabase
+        .from('winners')
+        .select('*')
+        .order('rank', { ascending: true });
+      
+      if (data) {
+        setWinners(data.map(w => ({
+          name: w.user_name,
+          amount: w.amount,
+          ticket: w.ticket_number,
+          rank: w.rank
+        })));
+      }
+    };
+    fetchWinners();
+  }, []);
 
   const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
   const [showNextLevel, setShowNextLevel] = useState(false);
@@ -288,21 +1002,152 @@ export default function App() {
     { name: 'جولد 1', tickets: 20000, prizePool: 180000, color: 'bg-gold', textColor: 'text-gold' },
   ];
 
-  const [shopTickets, setShopTickets] = useState<{id: string, number: string, sold: boolean}[]>([]);
-
+  // Seeding logic (one-time)
   useEffect(() => {
-    const ticketCount = LEVELS[currentLevelIndex].tickets;
-    const newTickets = Array.from({ length: ticketCount }, (_, i) => ({
-      id: `s${i}`,
-      number: (100000 + i + 1).toString(), // Sequential numbers starting from 100001
-      sold: Math.random() > 0.85
-    }));
-    setShopTickets(newTickets);
-  }, [currentLevelIndex]);
+    const seedTickets = async () => {
+      try {
+        const { count } = await supabase
+          .from('shop_tickets')
+          .select('*', { count: 'exact', head: true });
+        
+        if (count === 0) {
+          const tickets = [];
+          for (let i = 1; i <= 1000; i++) {
+            tickets.push({
+              number: i.toString().padStart(6, '0'),
+              level_index: 0,
+              is_sold: false
+            });
+          }
+          await supabase.from('shop_tickets').insert(tickets);
+          // Refresh the list after seeding
+          setDisplayLimit(prev => prev + 1);
+          setTimeout(() => setDisplayLimit(prev => prev - 1), 100);
+        }
+      } catch (e) {
+        console.error('Seeding error:', e);
+      }
+    };
+    seedTickets();
+  }, []);
+
+  // Fetch tickets from Supabase and subscribe to real-time updates
+  useEffect(() => {
+    const fetchTickets = async () => {
+      setIsSearching(true);
+      
+      // 1. Fetch counts for progress bar (only if not searching)
+      if (!searchQuery) {
+        const { count: totalCount } = await supabase
+          .from('shop_tickets')
+          .select('*', { count: 'exact', head: true })
+          .eq('level_index', currentLevelIndex);
+        
+        const { count: soldCount } = await supabase
+          .from('shop_tickets')
+          .select('*', { count: 'exact', head: true })
+          .eq('level_index', currentLevelIndex)
+          .eq('is_sold', true);
+
+        setTotalLevelTickets(totalCount || LEVELS[currentLevelIndex].tickets);
+        setSoldLevelTickets(soldCount || 0);
+      }
+
+      // 2. Fetch limited tickets for display
+      let query = supabase
+        .from('shop_tickets')
+        .select('id, number, is_sold')
+        .eq('level_index', currentLevelIndex)
+        .order('number', { ascending: true })
+        .limit(displayLimit);
+      
+      if (searchQuery) {
+        query = query.ilike('number', `%${searchQuery}%`);
+      }
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching tickets:', error);
+        setIsSearching(false);
+        return;
+      }
+
+      if (data) {
+        setShopTickets(data.map(t => ({
+          id: t.id,
+          number: t.number,
+          sold: t.is_sold
+        })));
+      }
+      setIsSearching(false);
+    };
+
+    const timer = setTimeout(() => {
+      fetchTickets();
+    }, searchQuery ? 500 : 0);
+
+    return () => clearTimeout(timer);
+  }, [currentLevelIndex, displayLimit, searchQuery]);
+
+  // Real-time subscription
+  useEffect(() => {
+    const channel = supabase
+      .channel('shop_tickets_changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'shop_tickets',
+        filter: `level_index=eq.${currentLevelIndex}`
+      }, (payload) => {
+        if (payload.eventType === 'UPDATE') {
+          setShopTickets(prev => prev.map(t => 
+            t.number === payload.new.number ? { ...t, sold: payload.new.is_sold } : t
+          ));
+          // Update sold count
+          if (payload.new.is_sold && !payload.old.is_sold) {
+            setSoldLevelTickets(prev => prev + 1);
+          } else if (!payload.new.is_sold && payload.old.is_sold) {
+            setSoldLevelTickets(prev => prev - 1);
+          }
+        } else if (payload.eventType === 'INSERT') {
+          setTotalLevelTickets(prev => prev + 1);
+          if (payload.new.is_sold) setSoldLevelTickets(prev => prev + 1);
+          
+          setShopTickets(prev => {
+            if (prev.length >= displayLimit) return prev;
+            if (searchQuery && !payload.new.number.includes(searchQuery)) return prev;
+            
+            return [...prev, {
+              id: payload.new.id,
+              number: payload.new.number,
+              sold: payload.new.is_sold
+            }].sort((a, b) => a.number.localeCompare(b.number));
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentLevelIndex, displayLimit, searchQuery]);
 
   const RECHARGE_ADDRESS = "bc31c5af70694dc0825ed2dce3167888";
 
+  const playSound = (type: 'success' | 'error' | 'buy' | 'recharge') => {
+    const sounds = {
+      success: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+      error: 'https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3',
+      buy: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3',
+      recharge: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'
+    };
+    const audio = new Audio(sounds[type]);
+    audio.play().catch(e => console.log('Audio play failed:', e));
+  };
+
   const addNotification = (text: string, type: 'success' | 'error' = 'success') => {
+    playSound(type);
     const id = Math.random().toString(36).substr(2, 9);
     setNotifications(prev => [...prev, { id, text, type }]);
     setTimeout(() => {
@@ -367,29 +1212,76 @@ export default function App() {
     return () => clearInterval(timer);
   }, [showMachine, isDrawing, drawnWinners, startDraw]);
 
-  const buyTicket = (forcedNumber?: string) => {
+  const buyTicket = async (forcedNumber?: string) => {
     if (!supabaseUser) {
       addNotification('يرجى تسجيل الدخول لشراء الكروت', 'error');
       setShowAuthModal(true);
       return false;
     }
-    if (user.balance >= TICKET_PRICE) {
+
+    if (user.balance < TICKET_PRICE) {
+      addNotification('عذراً، رصيدك غير كافٍ لشراء الكرت', 'error');
+      return false;
+    }
+
+    const ticketNumber = forcedNumber || (shopTickets.find(t => !t.sold)?.number);
+    
+    if (!ticketNumber) {
+      addNotification('عذراً، لا توجد كروت متاحة حالياً', 'error');
+      return false;
+    }
+
+    try {
+      // 1. Update ticket in Supabase
+      const { error: ticketError } = await supabase
+        .from('shop_tickets')
+        .update({ 
+          is_sold: true, 
+          owner_id: supabaseUser.id 
+        })
+        .eq('number', ticketNumber)
+        .eq('is_sold', false); // Safety check: only if not already sold
+
+      if (ticketError) throw ticketError;
+
+      // 2. Update user balance in profiles
+      const { error: balanceError } = await supabase
+        .from('profiles')
+        .update({ balance: user.balance - TICKET_PRICE })
+        .eq('id', supabaseUser.id);
+
+      if (balanceError) throw balanceError;
+
+      // 3. Update local state
       const newTicket: Ticket = {
         id: Math.random().toString(36).substr(2, 9),
-        number: forcedNumber || Math.floor(100000 + Math.random() * 900000).toString(),
+        number: ticketNumber,
         purchaseDate: new Date().toISOString().split('T')[0],
         status: 'active'
       };
+
       setUser({
         ...user,
         balance: user.balance - TICKET_PRICE,
         tickets: [newTicket, ...user.tickets]
       });
+
+      // 4. Add real notification to panel
+      await supabase.from('notifications').insert({
+        user_id: supabaseUser.id,
+        title: 'تم شراء كرت بنجاح',
+        message: `لقد قمت بشراء الكرت رقم ${ticketNumber} بنجاح. حظاً موفقاً في السحب القادم!`,
+        type: 'success'
+      });
+      
+      playSound('buy');
       addNotification('تم شراء الكرت بنجاح! حظاً موفقاً');
       return true;
+    } catch (error: any) {
+      console.error('Purchase error:', error);
+      addNotification('حدث خطأ أثناء عملية الشراء، يرجى المحاولة مرة أخرى', 'error');
+      return false;
     }
-    addNotification('عذراً، رصيدك غير كافٍ لشراء الكرت', 'error');
-    return false;
   };
 
   const handleCopyAddress = () => {
@@ -397,16 +1289,90 @@ export default function App() {
     addNotification('تم نسخ عنوان المحفظة بنجاح');
   };
 
-  const handleRechargeSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (isAdmin) {
+      fetchAdminRequests();
+    }
+  }, [isAdmin]);
+
+  const fetchAdminRequests = async () => {
+    setAdminLoading(true);
+    try {
+      console.log('Fetching admin requests for:', supabaseUser?.email);
+      const { data, error } = await supabase
+        .from('recharge_requests')
+        .select('*, profiles(first_name, last_name, balance)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Supabase Error fetching requests:', error);
+        throw error;
+      }
+      console.log('Fetched requests:', data?.length);
+      if (data) setAdminRequests(data);
+    } catch (err) {
+      console.error('Error fetching admin requests:', err);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleRechargeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabaseUser) {
       addNotification('يرجى تسجيل الدخول أولاً', 'error');
       setShowAuthModal(true);
       return;
     }
+    if (!rechargeReceipt) {
+      addNotification('يرجى إرفاق صورة الإيصال', 'error');
+      return;
+    }
     setRechargeStatus('submitting');
-    // Simulate API call
-    setTimeout(() => {
+    
+    try {
+      // 1. Upload image to Supabase Storage
+      const fileExt = rechargeReceipt.name.split('.').pop();
+      const fileName = `${supabaseUser.id}-${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(fileName, rechargeReceipt);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        if (uploadError.message.includes('Bucket not found')) {
+          throw new Error('خطأ: مخزن الصور "receipts" غير موجود في Supabase. يرجى إنشاؤه.');
+        }
+        throw new Error('فشل رفع الصورة. يرجى المحاولة لاحقاً');
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('receipts')
+        .getPublicUrl(fileName);
+
+      // 2. Insert into recharge_requests
+      const { error } = await supabase
+        .from('recharge_requests')
+        .insert({ 
+          user_id: supabaseUser.id,
+          receipt_url: publicUrl,
+          status: 'pending',
+          user_email: supabaseUser.email
+        });
+
+      if (error) throw error;
+
+      // 3. Add real notification to panel
+      await supabase.from('notifications').insert({
+        user_id: supabaseUser.id,
+        title: 'طلب شحن قيد المراجعة',
+        message: 'لقد تم استلام طلب الشحن الخاص بك بنجاح. سيتم التحقق من الإيصال وتحديث رصيدك قريباً.',
+        type: 'info'
+      });
+
+      playSound('recharge');
       setRechargeStatus('success');
       setTimeout(() => {
         setShowRecharge(false);
@@ -414,7 +1380,11 @@ export default function App() {
         setRechargeReceipt(null);
         addNotification('تم إرسال طلب الشحن بنجاح! سيتم التحقق من الوصل قريباً');
       }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      console.error('Recharge error:', err);
+      addNotification(err.message || 'حدث خطأ أثناء إرسال الطلب', 'error');
+      setRechargeStatus('idle');
+    }
   };
 
   return (
@@ -428,7 +1398,7 @@ export default function App() {
       </div>
 
       {/* Notifications */}
-      <div className="fixed top-24 left-6 right-6 z-[110] pointer-events-none space-y-3">
+      <div className="fixed top-24 left-6 right-6 z-[999] pointer-events-none space-y-3">
         <AnimatePresence>
           {notifications.map((n) => (
             <motion.div
@@ -481,13 +1451,34 @@ export default function App() {
             className="relative p-2 hover:bg-white/5 rounded-xl transition-colors"
           >
             <Bell className="w-4 h-4 text-gray-400" />
-            <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-cyan-500 rounded-full border-2 border-black" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-3 h-3 bg-red-500 text-white text-[7px] font-black rounded-full flex items-center justify-center border-2 border-black">
+                {unreadCount}
+              </span>
+            )}
           </button>
           <button onClick={() => setShowDevGuide(!showDevGuide)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
             <Info className="w-4 h-4 text-gray-400" />
           </button>
         </div>
       </header>
+
+      {/* Pull to Refresh Indicator */}
+      <AnimatePresence>
+        {isRefreshing && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 10 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-0 left-0 right-0 z-[200] flex justify-center pointer-events-none"
+          >
+            <div className="bg-cyan-500 text-black px-4 py-2 rounded-full shadow-lg shadow-cyan-500/20 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+              <Loader2 size={14} className="animate-spin" />
+              جاري التحديث...
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="max-w-md mx-auto px-5 pt-4 pb-28 space-y-6">
         
@@ -555,6 +1546,16 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {isAdmin && (
+                  <button 
+                    onClick={() => setShowAdminPanel(true)}
+                    className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-black font-black py-3 rounded-xl shadow-xl shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition-all mb-4 border border-white/10"
+                  >
+                    <ShieldCheck size={18} />
+                    <span className="text-xs uppercase tracking-widest">لوحة تحكم المسؤول</span>
+                  </button>
+                )}
 
                 {/* Prominent Buy Now Banner inside Hero */}
                 <button 
@@ -654,13 +1655,13 @@ export default function App() {
                     <span className="text-[10px] text-gray-400 font-bold">المتبقي في المتجر</span>
                   </div>
                   <span className="text-[10px] text-cyan-500 font-black">
-                    {shopTickets.filter(t => !t.sold).length.toLocaleString()} / {shopTickets.length.toLocaleString()}
+                    {(totalLevelTickets - soldLevelTickets).toLocaleString()} / {totalLevelTickets.toLocaleString()}
                   </span>
                 </div>
                 <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
                   <motion.div 
                     initial={{ width: 0 }}
-                    animate={{ width: `${(shopTickets.filter(t => !t.sold).length / shopTickets.length) * 100}%` }}
+                    animate={{ width: `${totalLevelTickets > 0 ? ((totalLevelTickets - soldLevelTickets) / totalLevelTickets) * 100 : 0}%` }}
                     className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.2)]"
                   />
                 </div>
@@ -790,11 +1791,11 @@ export default function App() {
                 </div>
               </div>
               <button 
-                onClick={() => {
+                onClick={async () => {
                   const available = shopTickets.filter(t => !t.sold);
                   if (available.length > 0) {
                     const random = available[Math.floor(Math.random() * available.length)];
-                    if (buyTicket(random.number)) {
+                    if (await buyTicket(random.number)) {
                       setShopTickets(prev => prev.map(t => t.id === random.id ? { ...t, sold: true } : t));
                     }
                   }
@@ -806,6 +1807,23 @@ export default function App() {
             </div>
 
             <div className="space-y-3 mb-4">
+              {/* Search Bar */}
+              <div className="relative group">
+                <ShoppingCart className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4 group-focus-within:text-cyan-500 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="ابحث عن رقم كرت معين..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-3 pr-11 pl-4 text-sm focus:border-cyan-500/50 focus:bg-white/[0.05] outline-none transition-all"
+                />
+                {isSearching && (
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                    <Loader2 className="w-4 h-4 text-cyan-500 animate-spin" />
+                  </div>
+                )}
+              </div>
+
               <div className="bg-white/5 border border-white/10 rounded-2xl p-3 relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 blur-3xl rounded-full -mr-12 -mt-12" />
                 
@@ -828,15 +1846,15 @@ export default function App() {
                 {/* Progress Bar */}
                 <div className="space-y-1.5 relative z-10">
                   <div className="flex justify-between items-end">
-                    <span className="text-[9px] text-gray-400 font-bold">المتبقي: {shopTickets.filter(t => !t.sold).length.toLocaleString()} كرت</span>
+                    <span className="text-[9px] text-gray-400 font-bold">المتبقي: {(totalLevelTickets - soldLevelTickets).toLocaleString()} كرت</span>
                     <span className="text-[9px] text-cyan-500 font-black">
-                      {Math.round((shopTickets.filter(t => !t.sold).length / shopTickets.length) * 100)}%
+                      {totalLevelTickets > 0 ? Math.round(((totalLevelTickets - soldLevelTickets) / totalLevelTickets) * 100) : 0}%
                     </span>
                   </div>
                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
                     <motion.div 
                       initial={{ width: 0 }}
-                      animate={{ width: `${(shopTickets.filter(t => !t.sold).length / shopTickets.length) * 100}%` }}
+                      animate={{ width: `${totalLevelTickets > 0 ? ((totalLevelTickets - soldLevelTickets) / totalLevelTickets) * 100 : 0}%` }}
                       className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.3)]"
                     />
                   </div>
@@ -913,24 +1931,28 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-5 gap-1.5 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar relative">
-              {shopTickets.length === 0 && (
+              {isSearching && shopTickets.length === 0 && (
                 <div className="col-span-5 py-20 text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto mb-4"></div>
-                  <p className="text-gray-500 text-xs">جاري تحميل الكروت...</p>
+                  <p className="text-gray-500 text-xs">جاري البحث عن الكروت...</p>
                 </div>
               )}
-              {shopTickets.length > 0 && shopTickets.every(t => t.sold) && (
-                <div className="col-span-5 py-10 text-center bg-red-500/10 border border-red-500/20 rounded-2xl">
-                  <p className="text-red-400 text-sm font-black">عذراً، جميع الكروت مباعة!</p>
-                  <p className="text-gray-500 text-[10px] mt-1">انتظر السحب القادم أو المستوى التالي</p>
+              {!isSearching && shopTickets.length === 0 && (
+                <div className="col-span-5 py-20 text-center bg-white/5 rounded-2xl border border-dashed border-white/10">
+                  <p className="text-gray-500 text-xs">
+                    {searchQuery ? "لا توجد كروت متاحة بهذا الرقم" : "لا توجد كروت متاحة في هذا المستوى حالياً"}
+                  </p>
+                  {!searchQuery && (
+                    <p className="text-[10px] text-gray-600 mt-2">يرجى التواصل مع الإدارة أو المحاولة لاحقاً</p>
+                  )}
                 </div>
               )}
               {shopTickets.map((ticket) => (
                 <button 
                   key={ticket.id}
                   disabled={ticket.sold}
-                  onClick={() => {
-                    if (buyTicket(ticket.number)) {
+                  onClick={async () => {
+                    if (await buyTicket(ticket.number)) {
                       setShopTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, sold: true } : t));
                     }
                   }}
@@ -953,10 +1975,22 @@ export default function App() {
               ))}
             </div>
 
-            <div className="bg-cyan-500/10 border border-cyan-500/20 p-4 rounded-2xl text-center">
-              <p className="text-cyan-500 text-sm font-black">لقد اشتريت جميع الكروت المتاحة!</p>
-              <p className="text-gray-500 text-[10px] mt-1">سيتم فتح المستوى التالي قريباً</p>
-            </div>
+            {shopTickets.length >= displayLimit && !searchQuery && (
+              <button 
+                onClick={() => setDisplayLimit(prev => prev + 100)}
+                className="w-full py-3 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-gray-400 hover:bg-white/10 transition-all flex items-center justify-center gap-2"
+              >
+                تحميل المزيد من الكروت
+                <ArrowDownLeft size={14} className="-rotate-45" />
+              </button>
+            )}
+
+            {soldLevelTickets >= totalLevelTickets && totalLevelTickets > 0 && (
+              <div className="bg-cyan-500/10 border border-cyan-500/20 p-4 rounded-2xl text-center">
+                <p className="text-cyan-500 text-sm font-black">لقد تم بيع جميع الكروت في هذا المستوى!</p>
+                <p className="text-gray-500 text-[10px] mt-1">سيتم فتح المستوى التالي قريباً</p>
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -986,39 +2020,95 @@ export default function App() {
               <>
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold">كروتي ({user.tickets.length})</h2>
-                  <button onClick={() => setActiveTab('shop')} className="p-1.5 bg-cyan-500 rounded-lg text-black">
-                    <ShoppingCart size={18} />
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setTicketSort(prev => prev === 'date-desc' ? 'date-asc' : 'date-desc')}
+                      className="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white transition-colors border border-white/5"
+                      title="ترتيب حسب التاريخ"
+                    >
+                      <Clock size={16} className={ticketSort === 'date-asc' ? 'rotate-180' : ''} />
+                    </button>
+                    <button onClick={() => setActiveTab('shop')} className="p-2 bg-cyan-500 rounded-xl text-black shadow-lg shadow-cyan-500/20">
+                      <ShoppingCart size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filters */}
+                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                  {[
+                    { id: 'all', label: 'الكل' },
+                    { id: 'active', label: 'نشطة' },
+                    { id: 'winner', label: 'رابحة' },
+                    { id: 'expired', label: 'منتهية' }
+                  ].map(filter => (
+                    <button
+                      key={filter.id}
+                      onClick={() => setTicketFilter(filter.id as any)}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border ${
+                        ticketFilter === filter.id 
+                          ? 'bg-cyan-500 text-black border-cyan-500 shadow-lg shadow-cyan-500/20' 
+                          : 'bg-white/5 text-gray-500 border-white/5 hover:border-white/10'
+                      }`}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="space-y-3">
-                  {user.tickets.length > 0 ? (
-                    user.tickets.map((ticket) => (
-                      <div key={ticket.id} className="relative overflow-hidden bg-[#1a1c20] border border-white/10 rounded-xl p-4 flex items-center justify-between">
-                        <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500" />
-                        <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-500">
-                            <TicketIcon size={22} />
-                          </div>
-                          <div>
-                            <p className="text-xl font-mono font-bold tracking-[0.2em] text-white">{ticket.number}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[9px] text-gray-500">{ticket.purchaseDate}</span>
-                              <span className="w-0.5 h-0.5 bg-gray-700 rounded-full" />
-                              <span className="text-[9px] text-cyan-500 font-bold uppercase tracking-widest">نشط</span>
+                  {user.tickets
+                    .filter(t => ticketFilter === 'all' || t.status === ticketFilter)
+                    .sort((a, b) => {
+                      const dateA = new Date(a.purchaseDate).getTime();
+                      const dateB = new Date(b.purchaseDate).getTime();
+                      return ticketSort === 'date-desc' ? dateB - dateA : dateA - dateB;
+                    })
+                    .length > 0 ? (
+                    user.tickets
+                      .filter(t => ticketFilter === 'all' || t.status === ticketFilter)
+                      .sort((a, b) => {
+                        const dateA = new Date(a.purchaseDate).getTime();
+                        const dateB = new Date(b.purchaseDate).getTime();
+                        return ticketSort === 'date-desc' ? dateB - dateA : dateA - dateB;
+                      })
+                      .map((ticket) => (
+                        <div key={ticket.id} className="relative overflow-hidden bg-[#1a1c20] border border-white/10 rounded-xl p-4 flex items-center justify-between group hover:border-cyan-500/30 transition-all">
+                          <div className={`absolute top-0 left-0 w-1 h-full ${
+                            ticket.status === 'active' ? 'bg-cyan-500' :
+                            ticket.status === 'winner' ? 'bg-yellow-500' : 'bg-gray-700'
+                          }`} />
+                          <div className="flex items-center gap-3">
+                            <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${
+                              ticket.status === 'active' ? 'bg-cyan-500/10 text-cyan-500' :
+                              ticket.status === 'winner' ? 'bg-yellow-500/10 text-yellow-500' : 'bg-gray-500/10 text-gray-500'
+                            }`}>
+                              {ticket.status === 'winner' ? <Trophy size={22} /> : <TicketIcon size={22} />}
+                            </div>
+                            <div>
+                              <p className="text-xl font-mono font-bold tracking-[0.2em] text-white">{ticket.number}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[9px] text-gray-500">{ticket.purchaseDate}</span>
+                                <span className="w-0.5 h-0.5 bg-gray-700 rounded-full" />
+                                <span className={`text-[9px] font-bold uppercase tracking-widest ${
+                                  ticket.status === 'active' ? 'text-cyan-500' :
+                                  ticket.status === 'winner' ? 'text-yellow-500' : 'text-gray-500'
+                                }`}>
+                                  {ticket.status === 'active' ? 'نشط' : ticket.status === 'winner' ? 'رابح' : 'منتهي'}
+                                </span>
+                              </div>
                             </div>
                           </div>
+                          <div className="bg-black/40 p-1.5 rounded-lg border border-white/5 group-hover:border-cyan-500/20 transition-colors">
+                            <Cpu size={14} className="text-gray-500 group-hover:text-cyan-500/50 transition-colors" />
+                          </div>
                         </div>
-                        <div className="bg-black/40 p-1.5 rounded-lg border border-white/5">
-                          <Cpu size={14} className="text-gray-500" />
-                        </div>
-                      </div>
-                    ))
+                      ))
                   ) : (
                     <div className="py-16 text-center bg-white/5 rounded-2xl border border-dashed border-white/10">
                       <TicketIcon size={40} className="mx-auto text-gray-600 mb-3" />
-                      <p className="text-gray-500 font-bold text-sm">لا تملك أي كروت حالياً</p>
-                      <button onClick={() => setActiveTab('shop')} className="mt-3 text-cyan-500 font-bold text-xs">اذهب للمتجر الآن</button>
+                      <p className="text-gray-500 font-bold text-sm">لا توجد كروت تطابق هذا الفلتر</p>
+                      <button onClick={() => { setTicketFilter('all'); setActiveTab('shop'); }} className="mt-3 text-cyan-500 font-bold text-xs">اذهب للمتجر الآن</button>
                     </div>
                   )}
                 </div>
@@ -1041,36 +2131,36 @@ export default function App() {
             </div>
 
             <div className="space-y-3">
-              {[
-                { name: 'محمد العلي', amount: 2000, ticket: '100492', rank: 1 },
-                { name: 'سارة الأحمد', amount: 1000, ticket: '100110', rank: 2 },
-                { name: 'خالد الحسين', amount: 500, ticket: '100552', rank: 3 },
-                { name: 'ليلى المحمد', amount: 500, ticket: '100992', rank: 4 },
-                { name: 'عمر الفاروق', amount: 100, ticket: '100330', rank: 5 },
-              ].map((winner, i) => (
-                <div key={i} className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl flex items-center justify-between group hover:bg-white/[0.04] transition-all relative overflow-hidden">
-                  {winner.rank === 1 && <div className="absolute top-0 right-0 w-1 h-full bg-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.5)]" />}
-                  <div className="flex items-center gap-4 relative z-10">
-                    <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shadow-lg ${
-                      winner.rank === 1 ? 'bg-cyan-500 text-black' : 
-                      winner.rank === 2 ? 'bg-gray-400 text-black' : 
-                      winner.rank === 3 ? 'bg-[#cd7f32] text-black' : 'bg-white/5 text-gray-500'
-                    }`}>
-                      {winner.rank}
+              {winners.length > 0 ? (
+                winners.map((winner, i) => (
+                  <div key={i} className="bg-white/[0.02] border border-white/5 p-4 rounded-3xl flex items-center justify-between group hover:bg-white/[0.04] transition-all relative overflow-hidden">
+                    {winner.rank === 1 && <div className="absolute top-0 right-0 w-1 h-full bg-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.5)]" />}
+                    <div className="flex items-center gap-4 relative z-10">
+                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shadow-lg ${
+                        winner.rank === 1 ? 'bg-cyan-500 text-black' : 
+                        winner.rank === 2 ? 'bg-gray-400 text-black' : 
+                        winner.rank === 3 ? 'bg-[#cd7f32] text-black' : 'bg-white/5 text-gray-500'
+                      }`}>
+                        {winner.rank}
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-white tracking-tight">{winner.name}</p>
+                        <p className="text-[10px] text-gray-500 font-mono tracking-wider">TICKET #{winner.ticket}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-black text-white tracking-tight">{winner.name}</p>
-                      <p className="text-[10px] text-gray-500 font-mono tracking-wider">TICKET #{winner.ticket}</p>
+                    <div className="text-right relative z-10">
+                      <p className={`text-lg font-black tracking-tighter tabular-nums ${winner.rank === 1 ? 'text-cyan-500' : 'text-white'}`}>
+                        {winner.amount.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">SYP</p>
                     </div>
                   </div>
-                  <div className="text-right relative z-10">
-                    <p className={`text-lg font-black tracking-tighter tabular-nums ${winner.rank === 1 ? 'text-cyan-500' : 'text-white'}`}>
-                      {winner.amount.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest">SYP</p>
-                  </div>
+                ))
+              ) : (
+                <div className="py-20 text-center bg-white/5 rounded-3xl border border-dashed border-white/10">
+                  <p className="text-gray-500 text-sm">لا يوجد فائزين مسجلين بعد</p>
                 </div>
-              ))}
+              )}
             </div>
           </motion.div>
         )}
@@ -1179,10 +2269,15 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-500">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-500 relative">
                     <Bell size={20} />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center border-2 border-[#0a0a0a]">
+                        {unreadCount}
+                      </span>
+                    )}
                   </div>
-                  <h2 className="text-xl font-black">النشاطات الأخيرة</h2>
+                  <h2 className="text-xl font-black">الإشعارات</h2>
                 </div>
                 <button 
                   onClick={() => setShowActivityPanel(false)}
@@ -1192,45 +2287,66 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-                {[
-                  { type: 'buy', text: 'شراء كرت يانصيب', time: 'منذ دقيقتين', amount: '-10' },
-                  { type: 'recharge', text: 'شحن رصيد محفظة', time: 'منذ ساعة', amount: '+5000' },
-                  { type: 'buy', text: 'شراء حزمة كروت (5)', time: 'منذ 3 ساعات', amount: '-50' },
-                  { type: 'win', text: 'فوز بجائزة المركز الثالث', time: 'منذ يوم', amount: '+500' },
-                  { type: 'recharge', text: 'شحن رصيد محفظة', time: 'منذ يومين', amount: '+2000' },
-                ].map((activity, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-white/[0.02] rounded-2xl border border-white/5 hover:bg-white/[0.04] transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        activity.type === 'recharge' ? 'bg-cyan-500/10 text-cyan-500' : 
-                        activity.type === 'win' ? 'bg-yellow-500/10 text-yellow-500' : 
-                        'bg-gray-500/10 text-gray-400'
-                      }`}>
-                        {activity.type === 'recharge' ? <ArrowDownLeft size={18} /> : 
-                         activity.type === 'win' ? <Trophy size={18} /> :
-                         <ShoppingCart size={18} />}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-white">{activity.text}</p>
-                        <p className="text-[10px] text-gray-500">{activity.time}</p>
-                      </div>
-                    </div>
-                    <span className={`text-xs font-black tabular-nums ${
-                      activity.amount.startsWith('+') ? 'text-cyan-500' : 'text-gray-400'
-                    }`}>
-                      {activity.amount}
-                    </span>
+              <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                {realNotifications.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-gray-500 space-y-4">
+                    <Bell size={40} className="opacity-20" />
+                    <p className="text-xs font-bold">لا توجد إشعارات حالياً</p>
                   </div>
-                ))}
+                ) : (
+                  realNotifications.map((notif) => (
+                    <motion.div 
+                      key={notif.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      onClick={async () => {
+                        if (!notif.is_read) {
+                          await supabase.from('notifications').update({ is_read: true }).eq('id', notif.id);
+                          setRealNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+                          setUnreadCount(prev => Math.max(0, prev - 1));
+                        }
+                      }}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer ${notif.is_read ? 'bg-white/[0.02] border-white/5 opacity-60' : 'bg-cyan-500/5 border-cyan-500/20 shadow-lg shadow-cyan-500/5'}`}
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <h4 className={`text-[11px] font-black ${notif.type === 'error' ? 'text-red-500' : notif.type === 'success' ? 'text-green-500' : 'text-cyan-500'}`}>
+                          {notif.title}
+                        </h4>
+                        <span className="text-[8px] text-gray-500 font-mono">
+                          {new Date(notif.created_at).toLocaleTimeString('ar-SY', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 leading-relaxed font-bold">
+                        {notif.message}
+                      </p>
+                      {!notif.is_read && (
+                        <div className="mt-2 flex justify-end">
+                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                        </div>
+                      )}
+                    </motion.div>
+                  ))
+                )}
               </div>
 
-              <div className="pt-6 mt-6 border-t border-white/5">
+              <div className="pt-6 mt-6 border-t border-white/5 space-y-3">
+                {realNotifications.length > 0 && (
+                  <button 
+                    onClick={async () => {
+                      await supabase.from('notifications').update({ is_read: true }).eq('user_id', supabaseUser?.id);
+                      setRealNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+                      setUnreadCount(0);
+                    }}
+                    className="w-full py-3.5 rounded-xl bg-cyan-500/10 text-cyan-500 font-bold border border-cyan-500/20 hover:bg-cyan-500/20 transition-all text-sm"
+                  >
+                    تحديد الكل كمقروء
+                  </button>
+                )}
                 <button 
                   onClick={() => setShowActivityPanel(false)}
-                  className="w-full py-3 rounded-xl bg-white/5 text-gray-400 font-bold text-xs hover:bg-white/10 transition-all"
+                  className="w-full py-3.5 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-all text-sm"
                 >
-                  إغلاق الإشعارات
+                  إغلاق
                 </button>
               </div>
             </motion.div>
@@ -1440,6 +2556,32 @@ export default function App() {
                 )}
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Admin Panel Modal */}
+      <AnimatePresence>
+        {showAdminPanel && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              className="bg-[#1a1c20] border border-white/10 rounded-[2.5rem] w-full max-w-lg h-[80vh] p-6 relative overflow-hidden flex flex-col shadow-2xl"
+            >
+              <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full -mr-32 -mt-32" />
+              <AdminPanel 
+                onClose={() => setShowAdminPanel(false)} 
+                requests={adminRequests} 
+                onRefresh={fetchAdminRequests}
+                addNotification={addNotification}
+              />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
