@@ -33,7 +33,8 @@ import {
   Eye,
   Trash2,
   RotateCcw,
-  Unlock
+  Unlock,
+  Gift
 } from 'lucide-react';
 import { TICKET_PRICE, PRIZE_TIERS } from './constants';
 import { Ticket, User } from './types';
@@ -1019,6 +1020,155 @@ function AdminPanel({
   );
 }
 
+function DailyRewardWheel({ user, onRewardClaimed, onClose, addNotification }: { 
+  user: User, 
+  onRewardClaimed: (amount: number) => void, 
+  onClose: () => void,
+  addNotification: (t: string, type?: 'success' | 'error') => void 
+}) {
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [rotation, setRotation] = useState(0);
+  const [prize, setPrize] = useState<number | null>(null);
+
+  const prizes = [0.5, 1, 1.5, 2, 0.5, 1, 1.5, 2]; // 8 segments
+
+  const spin = async () => {
+    if (isSpinning) return;
+    
+    setIsSpinning(true);
+    setPrize(null);
+    const spinRotation = 1800 + Math.random() * 360; // At least 5 full spins
+    setRotation(prev => prev + spinRotation);
+
+    setTimeout(async () => {
+      setIsSpinning(false);
+      const finalRotation = (rotation + spinRotation) % 360;
+      const segmentSize = 360 / prizes.length;
+      const prizeIndex = Math.floor((360 - (finalRotation % 360)) / segmentSize) % prizes.length;
+      const wonAmount = prizes[prizeIndex];
+      setPrize(wonAmount);
+      
+      try {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('balance, last_daily_reward_at')
+          .eq('id', user.id)
+          .single();
+
+        const lastClaim = profileData?.last_daily_reward_at;
+        const now = new Date();
+        
+        if (lastClaim) {
+           const lastDate = new Date(lastClaim);
+           if (lastDate.toDateString() === now.toDateString()) {
+             addNotification('لقد حصلت على مكافأتك اليوم بالفعل!', 'error');
+             onClose();
+             return;
+           }
+        }
+
+        const newBalance = (profileData?.balance || 0) + wonAmount;
+        const { error } = await supabase
+          .from('profiles')
+          .update({ 
+            balance: newBalance,
+            last_daily_reward_at: now.toISOString()
+          })
+          .eq('id', user.id);
+
+        if (error) throw error;
+        
+        addNotification(`مبروك! ربحت ${wonAmount} ليرة سورية`);
+        onRewardClaimed(wonAmount);
+      } catch (err) {
+        console.error('Daily Reward Error:', err);
+        addNotification('حدث خطأ أثناء استلام المكافأة', 'error');
+      }
+    }, 4000);
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl"
+    >
+      <div className="w-full max-w-sm bg-gray-900 border border-white/10 rounded-[2.5rem] p-8 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/10 to-transparent pointer-events-none" />
+        
+        <button 
+          onClick={onClose}
+          className="absolute top-6 right-6 text-gray-500 hover:text-white transition-colors z-10"
+        >
+          <X size={24} />
+        </button>
+
+        <div className="text-center space-y-2 mb-8 relative z-10">
+          <div className="w-12 h-12 bg-cyan-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Gift className="text-cyan-500 w-6 h-6" />
+          </div>
+          <h2 className="text-2xl font-black text-white tracking-tight">عجلة الحظ اليومية</h2>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">جرب حظك واربح رصيداً مجانياً كل يوم</p>
+        </div>
+
+        <div className="relative flex justify-center mb-8">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-20">
+            <div className="w-4 h-6 bg-cyan-500 shadow-lg" style={{ clipPath: 'polygon(50% 100%, 0% 0%, 100% 0%)' }} />
+          </div>
+
+          <motion.div 
+            animate={{ rotate: rotation }}
+            transition={{ duration: 4, ease: [0.45, 0.05, 0.55, 0.95] }}
+            className="w-64 h-64 rounded-full border-8 border-white/5 relative overflow-hidden shadow-2xl shadow-cyan-500/10"
+            style={{ 
+              background: 'conic-gradient(#06b6d4 0deg 45deg, #0891b2 45deg 90deg, #06b6d4 90deg 135deg, #0891b2 135deg 180deg, #06b6d4 180deg 225deg, #0891b2 225deg 270deg, #06b6d4 270deg 315deg, #0891b2 315deg 360deg)'
+            }}
+          >
+            {prizes.map((p, i) => (
+              <div 
+                key={i}
+                className="absolute top-0 left-1/2 -translate-x-1/2 h-1/2 origin-bottom flex flex-col items-center pt-4"
+                style={{ transform: `translateX(-50%) rotate(${i * 45 + 22.5}deg)` }}
+              >
+                <span className="text-white font-black text-sm drop-shadow-md">{p}</span>
+              </div>
+            ))}
+            <div className="absolute inset-0 m-auto w-12 h-12 bg-gray-900 rounded-full border-4 border-white/10 flex items-center justify-center shadow-inner">
+              <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse" />
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="space-y-4 relative z-10">
+          {prize !== null ? (
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="text-center p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl"
+            >
+              <p className="text-xs text-cyan-500 font-bold mb-1">مبروك! لقد ربحت</p>
+              <p className="text-3xl font-black text-white">{prize} ل.س</p>
+            </motion.div>
+          ) : (
+            <button 
+              onClick={spin}
+              disabled={isSpinning}
+              className="w-full bg-cyan-500 text-black font-black py-4 rounded-2xl shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all active:scale-95 disabled:opacity-50 disabled:scale-100"
+            >
+              {isSpinning ? 'جاري الدوران...' : 'ابدأ الدوران'}
+            </button>
+          )}
+          
+          <p className="text-[9px] text-gray-500 text-center font-bold uppercase tracking-widest">
+            يمكنك تدوير العجلة مرة واحدة كل 24 ساعة
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User>({
     id: 'guest',
@@ -1059,9 +1209,18 @@ export default function App() {
   const [adminRequests, setAdminRequests] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showDailyWheel, setShowDailyWheel] = useState(false);
+  const [lastRewardAt, setLastRewardAt] = useState<string | null>(null);
 
   const ADMIN_EMAILS = ['azaamazeez8876@gmail.com', 'rwanatiya3@gmail.com'];
   const isAdmin = supabaseUser?.email && ADMIN_EMAILS.includes(supabaseUser.email);
+
+  const canClaimReward = !lastRewardAt || new Date(lastRewardAt).toDateString() !== new Date().toDateString();
+
+  const handleRewardClaimed = (amount: number) => {
+    setUser(prev => ({ ...prev, balance: prev.balance + amount }));
+    setLastRewardAt(new Date().toISOString());
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -1109,6 +1268,7 @@ export default function App() {
       }
 
       if (profileData) {
+        setLastRewardAt(profileData.last_daily_reward_at);
         const metadata = supabaseUser.user_metadata;
         // Prioritize profile table data over auth metadata for consistency
         const fullName = profileData.first_name && profileData.last_name 
@@ -1792,12 +1952,27 @@ export default function App() {
                 <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 blur-3xl rounded-full -mr-12 -mt-12" />
                 
                 <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <p className="text-[9px] text-gray-400 mb-0.5 uppercase tracking-wider font-bold">الرصيد المتوفر</p>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-black tracking-tighter text-white drop-shadow-sm">{user.balance.toLocaleString()}</span>
-                      <span className="text-[10px] text-cyan-500 font-bold">ل.س</span>
+                  <div className="flex items-center gap-3">
+                    <div>
+                      <p className="text-[9px] text-gray-400 mb-0.5 uppercase tracking-wider font-bold">الرصيد المتوفر</p>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-black tracking-tighter text-white drop-shadow-sm">{user.balance.toLocaleString()}</span>
+                        <span className="text-[10px] text-cyan-500 font-bold">ل.س</span>
+                      </div>
                     </div>
+                    {canClaimReward && supabaseUser && (
+                      <motion.button 
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileActive={{ scale: 0.95 }}
+                        onClick={() => setShowDailyWheel(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500 text-black rounded-lg shadow-lg shadow-cyan-500/20"
+                      >
+                        <Gift size={12} />
+                        <span className="text-[8px] font-black uppercase tracking-widest">مكافأة يومية</span>
+                      </motion.button>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <button 
@@ -3116,6 +3291,17 @@ export default function App() {
       </nav>
 
       {/* Developer Guide Modal */}
+      <AnimatePresence>
+        {showDailyWheel && (
+          <DailyRewardWheel 
+            user={user} 
+            onRewardClaimed={handleRewardClaimed} 
+            onClose={() => setShowDailyWheel(false)} 
+            addNotification={addNotification}
+          />
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showDevGuide && (
           <motion.div 
