@@ -49,7 +49,15 @@ function AuthForm({ onSuccess, addNotification }: { onSuccess: () => void, addNo
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
   const [shamCash, setShamCash] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isLogin) {
+      const storedCode = localStorage.getItem('referral_code');
+      if (storedCode) setReferralCode(storedCode);
+    }
+  }, [isLogin]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +68,17 @@ function AuthForm({ onSuccess, addNotification }: { onSuccess: () => void, addNo
         if (error) throw error;
         addNotification('تم تسجيل الدخول بنجاح');
       } else {
+        // Find referrer ID from code if provided
+        let referredBy = null;
+        if (referralCode) {
+          const { data: referrer } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('referral_code', referralCode)
+            .single();
+          if (referrer) referredBy = referrer.id;
+        }
+
         const { error } = await supabase.auth.signUp({ 
           email, 
           password,
@@ -69,7 +88,8 @@ function AuthForm({ onSuccess, addNotification }: { onSuccess: () => void, addNo
               last_name: lastName,
               age: parseInt(age),
               sham_cash_address: shamCash,
-              email: email
+              email: email,
+              referred_by: referredBy
             }
           }
         });
@@ -199,6 +219,22 @@ function AuthForm({ onSuccess, addNotification }: { onSuccess: () => void, addNo
             />
           </div>
         </div>
+
+        {!isLogin && (
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-1">كود الإحالة (اختياري)</label>
+            <div className="relative group">
+              <Gift className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4 group-focus-within:text-cyan-500 transition-colors" />
+              <input 
+                type="text" 
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value)}
+                className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-2.5 pr-11 pl-4 text-sm focus:border-cyan-500/50 focus:bg-white/[0.05] outline-none transition-all"
+                placeholder="123456"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="pt-1">
           <button 
@@ -1020,8 +1056,9 @@ function AdminPanel({
   );
 }
 
-function DailyRewardWheel({ user, onRewardClaimed, onClose, addNotification }: { 
+function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNotification }: { 
   user: User, 
+  lastRewardAt: string | null,
   onRewardClaimed: (amount: number) => void, 
   onClose: () => void,
   addNotification: (t: string, type?: 'success' | 'error') => void 
@@ -1029,11 +1066,39 @@ function DailyRewardWheel({ user, onRewardClaimed, onClose, addNotification }: {
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [prize, setPrize] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
   const prizes = [0.5, 1, 1.5, 2, 0.5, 1, 1.5, 2]; // 8 segments
 
+  useEffect(() => {
+    if (lastRewardAt) {
+      const updateTimer = () => {
+        const lastDate = new Date(lastRewardAt);
+        const nextDate = new Date(lastDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+        nextDate.setHours(0, 0, 0, 0);
+        
+        const now = new Date();
+        const diff = nextDate.getTime() - now.getTime();
+        
+        if (diff <= 0) {
+          setTimeLeft(null);
+        } else {
+          const hours = Math.floor(diff / (1000 * 60 * 60));
+          const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+          setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+        }
+      };
+      
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [lastRewardAt]);
+
   const spin = async () => {
-    if (isSpinning) return;
+    if (isSpinning || timeLeft) return;
     
     setIsSpinning(true);
     setPrize(null);
@@ -1049,35 +1114,28 @@ function DailyRewardWheel({ user, onRewardClaimed, onClose, addNotification }: {
       setPrize(wonAmount);
       
       try {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('balance, last_daily_reward_at')
-          .eq('id', user.id)
-          .single();
-
-        const lastClaim = profileData?.last_daily_reward_at;
-        const now = new Date();
-        
-        if (lastClaim) {
-           const lastDate = new Date(lastClaim);
-           if (lastDate.toDateString() === now.toDateString()) {
-             addNotification('لقد حصلت على مكافأتك اليوم بالفعل!', 'error');
-             onClose();
-             return;
-           }
-        }
-
-        const newBalance = (profileData?.balance || 0) + wonAmount;
-        const { error } = await supabase
-          .from('profiles')
-          .update({ 
-            balance: newBalance,
-            last_daily_reward_at: now.toISOString()
-          })
-          .eq('id', user.id);
+        // Use RPC for server-side time validation
+        const { data, error } = await supabase.rpc('claim_daily_reward', {
+          user_id: user.id,
+          reward_amount: wonAmount
+        });
 
         if (error) throw error;
         
+        const result = data as any;
+        if (!result.success) {
+          addNotification(result.message, 'error');
+          onClose();
+          return;
+        }
+        
+        // Add to notifications table
+        await supabase.from('notifications').insert({
+          user_id: user.id,
+          text: `مبروك! لقد ربحت ${wonAmount} ليرة سورية من عجلة الحظ اليومية`,
+          type: 'success'
+        });
+
         addNotification(`مبروك! ربحت ${wonAmount} ليرة سورية`);
         onRewardClaimed(wonAmount);
       } catch (err) {
@@ -1094,33 +1152,42 @@ function DailyRewardWheel({ user, onRewardClaimed, onClose, addNotification }: {
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl"
     >
-      <div className="w-full max-w-sm bg-gray-900 border border-white/10 rounded-[2.5rem] p-8 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/10 to-transparent pointer-events-none" />
+      <div className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-[3rem] p-8 relative overflow-hidden shadow-[0_0_50px_rgba(6,182,212,0.15)]">
+        <div className="absolute inset-0 bg-gradient-to-b from-cyan-500/5 via-transparent to-transparent pointer-events-none" />
         
         <button 
           onClick={onClose}
-          className="absolute top-6 right-6 text-gray-500 hover:text-white transition-colors z-10"
+          className="absolute top-8 right-8 text-gray-500 hover:text-white transition-colors z-10 p-2 hover:bg-white/5 rounded-full"
         >
-          <X size={24} />
+          <X size={20} />
         </button>
 
-        <div className="text-center space-y-2 mb-8 relative z-10">
-          <div className="w-12 h-12 bg-cyan-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Gift className="text-cyan-500 w-6 h-6" />
-          </div>
-          <h2 className="text-2xl font-black text-white tracking-tight">عجلة الحظ اليومية</h2>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">جرب حظك واربح رصيداً مجانياً كل يوم</p>
+        <div className="text-center space-y-2 mb-10 relative z-10">
+          <motion.div 
+            animate={{ y: [0, -5, 0] }}
+            transition={{ duration: 2, repeat: Infinity }}
+            className="w-16 h-16 bg-gradient-to-tr from-cyan-500/20 to-blue-500/20 rounded-[2rem] flex items-center justify-center mx-auto mb-4 border border-cyan-500/20 shadow-lg shadow-cyan-500/10"
+          >
+            <Gift className="text-cyan-500 w-8 h-8" />
+          </motion.div>
+          <h2 className="text-2xl font-black text-white tracking-tight">عجلة الحظ الملكية</h2>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Elite Daily Rewards</p>
         </div>
 
-        <div className="relative flex justify-center mb-8">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-20">
-            <div className="w-4 h-6 bg-cyan-500 shadow-lg" style={{ clipPath: 'polygon(50% 100%, 0% 0%, 100% 0%)' }} />
+        <div className="relative flex justify-center mb-10">
+          {/* The Needle */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-3 z-30">
+            <div className="w-6 h-8 bg-gradient-to-b from-white to-cyan-500 shadow-xl" style={{ clipPath: 'polygon(50% 100%, 0% 0%, 100% 0%)' }} />
           </div>
 
+          {/* Outer Glow */}
+          <div className="absolute inset-0 m-auto w-72 h-72 rounded-full bg-cyan-500/5 blur-3xl" />
+
+          {/* The Wheel */}
           <motion.div 
             animate={{ rotate: rotation }}
             transition={{ duration: 4, ease: [0.45, 0.05, 0.55, 0.95] }}
-            className="w-64 h-64 rounded-full border-8 border-white/5 relative overflow-hidden shadow-2xl shadow-cyan-500/10"
+            className="w-64 h-64 rounded-full border-[12px] border-[#1a1c20] relative overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] z-10"
             style={{ 
               background: 'conic-gradient(#06b6d4 0deg 45deg, #0891b2 45deg 90deg, #06b6d4 90deg 135deg, #0891b2 135deg 180deg, #06b6d4 180deg 225deg, #0891b2 225deg 270deg, #06b6d4 270deg 315deg, #0891b2 315deg 360deg)'
             }}
@@ -1128,14 +1195,21 @@ function DailyRewardWheel({ user, onRewardClaimed, onClose, addNotification }: {
             {prizes.map((p, i) => (
               <div 
                 key={i}
-                className="absolute top-0 left-1/2 -translate-x-1/2 h-1/2 origin-bottom flex flex-col items-center pt-4"
+                className="absolute top-0 left-1/2 -translate-x-1/2 h-1/2 origin-bottom flex flex-col items-center pt-6"
                 style={{ transform: `translateX(-50%) rotate(${i * 45 + 22.5}deg)` }}
               >
-                <span className="text-white font-black text-sm drop-shadow-md">{p}</span>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-white font-black text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">{p}</span>
+                  <span className="text-[6px] text-white/60 font-bold uppercase tracking-tighter">ل.س</span>
+                </div>
               </div>
             ))}
-            <div className="absolute inset-0 m-auto w-12 h-12 bg-gray-900 rounded-full border-4 border-white/10 flex items-center justify-center shadow-inner">
-              <div className="w-2 h-2 bg-cyan-500 rounded-full animate-pulse" />
+            {/* Inner Ring */}
+            <div className="absolute inset-0 m-auto w-48 h-48 rounded-full border border-white/10 pointer-events-none" />
+            
+            {/* Center Cap */}
+            <div className="absolute inset-0 m-auto w-14 h-14 bg-[#0a0a0a] rounded-full border-4 border-[#1a1c20] flex items-center justify-center shadow-2xl z-20">
+              <div className="w-4 h-4 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
             </div>
           </motion.div>
         </div>
@@ -1145,27 +1219,187 @@ function DailyRewardWheel({ user, onRewardClaimed, onClose, addNotification }: {
             <motion.div 
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="text-center p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl"
+              className="text-center p-5 bg-cyan-500/10 border border-cyan-500/20 rounded-3xl"
             >
-              <p className="text-xs text-cyan-500 font-bold mb-1">مبروك! لقد ربحت</p>
-              <p className="text-3xl font-black text-white">{prize} ل.س</p>
+              <p className="text-[10px] text-cyan-500 font-black uppercase tracking-widest mb-1">مبروك! لقد ربحت</p>
+              <p className="text-4xl font-black text-white tracking-tighter">{prize} <span className="text-sm font-bold text-cyan-500">ل.س</span></p>
             </motion.div>
+          ) : timeLeft ? (
+            <div className="text-center p-5 bg-white/5 border border-white/10 rounded-3xl">
+              <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">المكافأة القادمة خلال</p>
+              <p className="text-3xl font-black text-white tracking-tighter tabular-nums">{timeLeft}</p>
+            </div>
           ) : (
             <button 
               onClick={spin}
               disabled={isSpinning}
-              className="w-full bg-cyan-500 text-black font-black py-4 rounded-2xl shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all active:scale-95 disabled:opacity-50 disabled:scale-100"
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-black font-black py-5 rounded-3xl shadow-2xl shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 group"
             >
-              {isSpinning ? 'جاري الدوران...' : 'ابدأ الدوران'}
+              <div className="flex items-center justify-center gap-3">
+                {isSpinning ? (
+                  <>
+                    <Loader2 className="animate-spin w-5 h-5" />
+                    <span>جاري الدوران...</span>
+                  </>
+                ) : (
+                  <>
+                    <RotateCcw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-700" />
+                    <span>ابدأ الدوران الآن</span>
+                  </>
+                )}
+              </div>
             </button>
           )}
           
-          <p className="text-[9px] text-gray-500 text-center font-bold uppercase tracking-widest">
-            يمكنك تدوير العجلة مرة واحدة كل 24 ساعة
-          </p>
+          <div className="flex items-center justify-center gap-2">
+            <Info size={12} className="text-gray-600" />
+            <p className="text-[8px] text-gray-600 font-bold uppercase tracking-[0.2em]">
+              تعتمد المكافأة على توقيت السيرفر العالمي
+            </p>
+          </div>
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function ReferralDashboard({ user, addNotification }: { user: User, addNotification: (t: string, type?: 'success' | 'error') => void }) {
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ totalInvited: 0, totalRewards: 0 });
+
+  const fetchReferrals = async () => {
+    if (!user.id || user.id === 'guest') return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, first_name, last_name, created_at')
+        .eq('referred_by', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setReferrals(data || []);
+      setStats({
+        totalInvited: data?.length || 0,
+        totalRewards: data?.length || 0 // 1 SYP per referral
+      });
+    } catch (error) {
+      console.error('Error fetching referrals:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReferrals();
+  }, [user.id]);
+
+  const referralLink = `${window.location.origin}/register?ref=${user.referralCode}`;
+
+  const copyLink = () => {
+    if (!user.referralCode) return;
+    navigator.clipboard.writeText(referralLink);
+    addNotification('تم نسخ رابط الإحالة بنجاح');
+  };
+
+  const shareWhatsApp = () => {
+    if (!user.referralCode) return;
+    const text = `انضم إلي في يانصيب الشام واربح جوائز قيمة! سجل من خلال رابطي واحصل على ميزات إضافية: ${referralLink}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Referral Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white/5 border border-white/5 p-4 rounded-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-500/5 blur-2xl rounded-full -mr-8 -mt-8" />
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-wider mb-1 relative z-10">إجمالي المدعوين</p>
+          <p className="text-2xl font-black text-white relative z-10">{stats.totalInvited}</p>
+        </div>
+        <div className="bg-white/5 border border-white/5 p-4 rounded-2xl relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-green-500/5 blur-2xl rounded-full -mr-8 -mt-8" />
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-wider mb-1 relative z-10">إجمالي المكافآت</p>
+          <p className="text-2xl font-black text-green-500 relative z-10">{stats.totalRewards} <span className="text-xs">ل.س</span></p>
+        </div>
+      </div>
+
+      {/* Referral Code & Link */}
+      <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6 space-y-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-3xl rounded-full -mr-16 -mt-16" />
+        
+        <div className="text-center space-y-1 relative z-10">
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em]">كود الإحالة الخاص بك</p>
+          <h3 className="text-3xl font-black text-white tracking-[0.3em]">{user.referralCode || '------'}</h3>
+        </div>
+
+        <div className="space-y-2 relative z-10">
+          <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest text-center">رابط الإحالة</p>
+          <div className="flex items-center gap-2 bg-black/40 p-2 rounded-xl border border-white/5">
+            <input 
+              readOnly 
+              value={referralLink}
+              className="flex-1 bg-transparent text-[10px] text-gray-400 font-mono outline-none px-2"
+            />
+            <button onClick={copyLink} className="p-2 bg-white/5 rounded-lg hover:bg-white/10 transition-all">
+              <Copy size={14} className="text-cyan-500" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 relative z-10">
+          <button 
+            onClick={shareWhatsApp}
+            className="flex items-center justify-center gap-2 py-3 bg-[#25D366]/10 text-[#25D366] rounded-xl font-black text-xs border border-[#25D366]/20 hover:bg-[#25D366]/20 transition-all"
+          >
+            <Plus size={16} />
+            واتساب
+          </button>
+          <button 
+            onClick={copyLink}
+            className="flex items-center justify-center gap-2 py-3 bg-cyan-500/10 text-cyan-500 rounded-xl font-black text-xs border border-cyan-500/20 hover:bg-cyan-500/20 transition-all"
+          >
+            <Copy size={16} />
+            نسخ الرابط
+          </button>
+        </div>
+      </div>
+
+      {/* Invited Users List */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-white uppercase tracking-widest px-2">قائمة المدعوين</h3>
+        <div className="space-y-2">
+          {loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="w-6 h-6 text-cyan-500 animate-spin" />
+            </div>
+          ) : referrals.length === 0 ? (
+            <div className="py-10 text-center bg-white/5 rounded-2xl border border-dashed border-white/10">
+              <p className="text-gray-500 text-xs">لم تقم بدعوة أي مستخدم بعد. ابدأ الآن!</p>
+            </div>
+          ) : (
+            referrals.map((ref) => (
+              <div key={ref.id} className="bg-white/5 border border-white/5 p-3 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center text-cyan-500">
+                    <UserIcon size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">{ref.first_name} {ref.last_name}</p>
+                    <p className="text-[9px] text-gray-500">انضم في: {new Date(ref.created_at).toLocaleDateString('ar-SY')}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-black text-green-500">+1 ل.س</p>
+                  <p className="text-[8px] text-gray-500 uppercase font-bold">مكافأة</p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1178,7 +1412,7 @@ export default function App() {
   });
 
   const [winners, setWinners] = useState<{name: string, amount: number, ticket: string, rank: number}[]>([]);
-  const [activeTab, setActiveTab] = useState<'home' | 'shop' | 'tickets' | 'winners' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'shop' | 'tickets' | 'winners' | 'profile' | 'referral'>('home');
   const [ticketFilter, setTicketFilter] = useState<'all' | 'active' | 'winner' | 'expired'>('all');
   const [ticketSort, setTicketSort] = useState<'date-desc' | 'date-asc'>('date-desc');
   const [showDevGuide, setShowDevGuide] = useState(false);
@@ -1223,6 +1457,13 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Detect referral code from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const ref = urlParams.get('ref');
+    if (ref) {
+      localStorage.setItem('referral_code', ref);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSupabaseUser(session?.user ?? null);
       setAuthLoading(false);
@@ -1236,13 +1477,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!supabaseUser) return;
+
+    // 4. Real-time Profile Subscription
+    const profileSubscription = supabase
+      .channel(`profile-changes-${supabaseUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${supabaseUser.id}`
+        },
+        (payload) => {
+          const updatedProfile = payload.new as any;
+          setUser(prev => ({
+            ...prev,
+            balance: updatedProfile.balance || 0
+          }));
+          setLastRewardAt(updatedProfile.last_daily_reward_at);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      profileSubscription.unsubscribe();
+    };
+  }, [supabaseUser]);
+
+  useEffect(() => {
     const fetchProfileData = async () => {
       if (!supabaseUser) return;
       
       // 1. Fetch Profile & Balance
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('*')
+        .select('*, referral_code, referred_by')
         .eq('id', supabaseUser.id)
         .single();
         
@@ -1282,6 +1553,8 @@ export default function App() {
           name: fullName,
           balance: profileData.balance || 0,
           isFrozen: profileData.is_frozen || false,
+          referralCode: profileData.referral_code,
+          referredBy: profileData.referred_by,
           tickets: (ticketsData || []).map(t => ({
             id: t.id,
             number: t.number,
@@ -1967,7 +2240,7 @@ export default function App() {
                         whileHover={{ scale: 1.05 }}
                         whileActive={{ scale: 0.95 }}
                         onClick={() => setShowDailyWheel(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500 text-black rounded-lg shadow-lg shadow-cyan-500/20"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500 text-black rounded-lg shadow-lg shadow-cyan-500/20 hidden"
                       >
                         <Gift size={12} />
                         <span className="text-[8px] font-black uppercase tracking-widest">مكافأة يومية</span>
@@ -2649,7 +2922,7 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
+            className="space-y-6 pb-20"
           >
             {!supabaseUser ? (
               <div className="py-20 text-center space-y-6">
@@ -2692,8 +2965,8 @@ export default function App() {
                     <p className="text-xl font-bold">{user.tickets.length}</p>
                   </div>
                   <div className="bg-white/5 border border-white/5 p-3 rounded-2xl">
-                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">إجمالي الأرباح</p>
-                    <p className="text-xl font-bold text-cyan-500">0</p>
+                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider mb-0.5">كود الإحالة</p>
+                    <p className="text-xl font-bold text-cyan-500">{user.referralCode || '---'}</p>
                   </div>
                 </div>
 
@@ -2723,6 +2996,34 @@ export default function App() {
                   تسجيل الخروج
                 </button>
               </>
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === 'referral' && (
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="space-y-6 pb-20"
+          >
+            {!supabaseUser ? (
+              <div className="py-20 text-center space-y-6">
+                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10">
+                  <Plus size={40} className="text-gray-600" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-black text-white">لم تقم بتسجيل الدخول</h2>
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">سجل دخولك للوصول إلى نظام الإحالة</p>
+                </div>
+                <button 
+                  onClick={() => setShowAuthModal(true)}
+                  className="px-8 py-4 bg-cyan-500 text-black font-black rounded-2xl shadow-xl shadow-cyan-500/20 active:scale-95 transition-all text-sm"
+                >
+                  تسجيل الدخول الآن
+                </button>
+              </div>
+            ) : (
+              <ReferralDashboard user={user} addNotification={addNotification} />
             )}
           </motion.div>
         )}
@@ -3269,6 +3570,7 @@ export default function App() {
           { id: 'shop', icon: <ShoppingCart />, label: 'المتجر' },
           { id: 'tickets', icon: <TicketIcon />, label: 'كروتي' },
           { id: 'winners', icon: <Trophy />, label: 'النتائج' },
+          { id: 'referral', icon: <Plus />, label: 'فريقي' },
           { id: 'profile', icon: <UserIcon />, label: 'حسابي' },
         ].map((tab) => (
           <button 
@@ -3295,12 +3597,51 @@ export default function App() {
         {showDailyWheel && (
           <DailyRewardWheel 
             user={user} 
+            lastRewardAt={lastRewardAt}
             onRewardClaimed={handleRewardClaimed} 
             onClose={() => setShowDailyWheel(false)} 
             addNotification={addNotification}
           />
         )}
       </AnimatePresence>
+
+      {/* Floating Daily Reward Button */}
+      {supabaseUser && (
+        <motion.button
+          initial={{ x: 100 }}
+          animate={{ x: 0 }}
+          whileHover={{ x: -10 }}
+          onClick={() => setShowDailyWheel(true)}
+          className={`fixed right-0 top-1/2 -translate-y-1/2 z-[90] flex items-center gap-3 pl-4 pr-3 py-3 rounded-l-3xl border-y border-l transition-all shadow-2xl ${
+            canClaimReward 
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 border-white/20 text-black shadow-cyan-500/20' 
+              : 'bg-[#1a1c20] border-white/5 text-gray-500 opacity-60 grayscale'
+          }`}
+        >
+          <div className="relative">
+            <motion.div
+              animate={canClaimReward ? { rotate: 360 } : {}}
+              transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+            >
+              <RotateCcw size={24} className={canClaimReward ? 'text-black' : 'text-gray-600'} />
+            </motion.div>
+            {canClaimReward && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-cyan-500 animate-bounce" />
+            )}
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="text-[10px] font-black uppercase tracking-tighter leading-none">مكافأة</span>
+            <span className="text-[8px] font-bold uppercase tracking-widest opacity-70 leading-none">يومية</span>
+          </div>
+          {canClaimReward && (
+            <motion.div
+              animate={{ opacity: [0, 1, 0] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="absolute inset-0 rounded-l-3xl bg-white/20 pointer-events-none"
+            />
+          )}
+        </motion.button>
+      )}
 
       <AnimatePresence>
         {showDevGuide && (

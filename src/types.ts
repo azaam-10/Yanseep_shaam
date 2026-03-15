@@ -19,4 +19,6 @@ export interface User {
   balance: number;
   tickets: Ticket[];
   isFrozen?: boolean;
+  referralCode?: string;
+  referredBy?: string;
 }
