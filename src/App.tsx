@@ -41,8 +41,8 @@ import { Ticket, User } from './types';
 import { supabase } from './supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
-function AuthForm({ onSuccess, addNotification }: { onSuccess: () => void, addNotification: (t: string, type?: 'success' | 'error') => void }) {
-  const [isLogin, setIsLogin] = useState(true);
+function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuccess: () => void, addNotification: (t: string, type?: 'success' | 'error') => void, initialMode?: 'login' | 'signup' }) {
+  const [isLogin, setIsLogin] = useState(initialMode === 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -1295,7 +1295,7 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
     fetchReferrals();
   }, [user.id]);
 
-  const referralLink = `${window.location.origin}/register?ref=${user.referralCode}`;
+  const referralLink = `${window.location.origin}/?ref=${user.referralCode}`;
 
   const copyLink = () => {
     if (!user.referralCode) return;
@@ -1421,6 +1421,7 @@ export default function App() {
   const [showRedeem, setShowRedeem] = useState(false);
   const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('login');
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawnWinners, setDrawnWinners] = useState<string[]>([]);
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -1467,6 +1468,11 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSupabaseUser(session?.user ?? null);
       setAuthLoading(false);
+      // If there's a referral code and no session, show the registration modal
+      if (!session && ref) {
+        setAuthInitialMode('signup');
+        setShowAuthModal(true);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -2934,7 +2940,10 @@ export default function App() {
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">سجل دخولك لعرض ملفك الشخصي وإدارة كروتك</p>
                 </div>
                 <button 
-                  onClick={() => setShowAuthModal(true)}
+                  onClick={() => {
+                    setAuthInitialMode('login');
+                    setShowAuthModal(true);
+                  }}
                   className="px-8 py-4 bg-cyan-500 text-black font-black rounded-2xl shadow-xl shadow-cyan-500/20 active:scale-95 transition-all text-sm"
                 >
                   تسجيل الدخول الآن
@@ -3016,7 +3025,10 @@ export default function App() {
                   <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">سجل دخولك للوصول إلى نظام الإحالة</p>
                 </div>
                 <button 
-                  onClick={() => setShowAuthModal(true)}
+                  onClick={() => {
+                    setAuthInitialMode('login');
+                    setShowAuthModal(true);
+                  }}
                   className="px-8 py-4 bg-cyan-500 text-black font-black rounded-2xl shadow-xl shadow-cyan-500/20 active:scale-95 transition-all text-sm"
                 >
                   تسجيل الدخول الآن
@@ -3557,7 +3569,11 @@ export default function App() {
                 <X size={18} />
               </button>
 
-              <AuthForm onSuccess={() => setShowAuthModal(false)} addNotification={addNotification} />
+              <AuthForm 
+                onSuccess={() => setShowAuthModal(false)} 
+                addNotification={addNotification} 
+                initialMode={authInitialMode}
+              />
             </motion.div>
           </motion.div>
         )}
