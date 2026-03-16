@@ -28,13 +28,16 @@ import {
   Lock,
   Loader2,
   ShieldCheck,
+  RefreshCw,
+  Share2,
   Plus,
   Search,
   Eye,
   Trash2,
   RotateCcw,
   Unlock,
-  Gift
+  Gift,
+  Star
 } from 'lucide-react';
 import { TICKET_PRICE, PRIZE_TIERS } from './constants';
 import { Ticket, User } from './types';
@@ -70,15 +73,27 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
       } else {
         // Find referrer ID from code if provided
         let referredBy = null;
-        if (referralCode) {
-          const { data: referrer } = await supabase
+        if (referralCode && referralCode.trim()) {
+          console.log('Searching for referral code:', referralCode.trim());
+          const { data: referrer, error: refError } = await supabase
             .from('profiles')
             .select('id')
-            .eq('referral_code', referralCode)
-            .single();
-          if (referrer) referredBy = referrer.id;
+            .eq('referral_code', referralCode.trim())
+            .maybeSingle();
+          
+          if (refError) {
+            console.error('Referral lookup error:', refError);
+          }
+          
+          if (referrer) {
+            referredBy = referrer.id;
+            console.log('Referrer found! ID:', referredBy);
+          } else {
+            console.warn('No user found with this referral code.');
+          }
         }
 
+        const ageValue = age !== '' ? parseInt(age) : null;
         const { error } = await supabase.auth.signUp({ 
           email, 
           password,
@@ -86,7 +101,7 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
             data: {
               first_name: firstName,
               last_name: lastName,
-              age: parseInt(age),
+              age: !isNaN(Number(ageValue)) ? ageValue : null,
               sham_cash_address: shamCash,
               email: email,
               referred_by: referredBy
@@ -103,6 +118,10 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
       
       if (errorMessage === 'Invalid login credentials') {
         errorMessage = isLogin ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة' : 'حدث خطأ أثناء إنشاء الحساب';
+      } else if (errorMessage === 'User already registered') {
+        errorMessage = 'هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول بدلاً من ذلك.';
+      } else if (errorMessage.includes('Database error saving new user')) {
+        errorMessage = 'خطأ في قاعدة البيانات: يرجى التأكد من تشغيل ملف الإعداد SQL في Supabase.';
       } else if (errorMessage === 'Email not confirmed') {
         errorMessage = 'يرجى تأكيد بريدك الإلكتروني أولاً';
       } else if (errorMessage.includes('rate limit exceeded')) {
@@ -1132,7 +1151,8 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
         // Add to notifications table
         await supabase.from('notifications').insert({
           user_id: user.id,
-          text: `مبروك! لقد ربحت ${wonAmount} ليرة سورية من عجلة الحظ اليومية`,
+          title: 'مكافأة يومية',
+          message: `مبروك! لقد ربحت ${wonAmount} ليرة سورية من عجلة الحظ اليومية`,
           type: 'success'
         });
 
@@ -1267,6 +1287,9 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
   const [referrals, setReferrals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ totalInvited: 0, totalRewards: 0 });
+  const [showRedeemModal, setShowRedeemModal] = useState(false);
+  const [redeemAmount, setRedeemAmount] = useState('');
+  const [isRedeeming, setIsRedeeming] = useState(false);
 
   const fetchReferrals = async () => {
     if (!user.id || user.id === 'guest') return;
@@ -1282,7 +1305,7 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
       setReferrals(data || []);
       setStats({
         totalInvited: data?.length || 0,
-        totalRewards: data?.length || 0 // 1 SYP per referral
+        totalRewards: data?.length || 0 // 1 Point per referral
       });
     } catch (error) {
       console.error('Error fetching referrals:', error);
@@ -1294,6 +1317,41 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
   useEffect(() => {
     fetchReferrals();
   }, [user.id]);
+
+  const handleRedeem = async () => {
+    const amount = parseInt(redeemAmount);
+    if (isNaN(amount) || amount <= 0) {
+      addNotification('يرجى إدخال عدد نقاط صحيح', 'error');
+      return;
+    }
+    if (amount > user.points) {
+      addNotification('عذراً، ليس لديك نقاط كافية', 'error');
+      return;
+    }
+
+    setIsRedeeming(true);
+    try {
+      const { data, error } = await supabase.rpc('exchange_points_for_balance', {
+        user_id: user.id,
+        amount_to_exchange: amount
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        addNotification(`تم استبدال ${amount} نقطة بـ ${amount} ليرة سورية بنجاح`, 'success');
+        setShowRedeemModal(false);
+        setRedeemAmount('');
+      } else {
+        addNotification(data?.message || 'فشل استبدال النقاط', 'error');
+      }
+    } catch (error) {
+      console.error('Redeem error:', error);
+      addNotification('حدث خطأ أثناء استبدال النقاط', 'error');
+    } finally {
+      setIsRedeeming(false);
+    }
+  };
 
   const referralLink = `${window.location.origin}/?ref=${user.referralCode}`;
 
@@ -1321,9 +1379,69 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
         <div className="bg-white/5 border border-white/5 p-4 rounded-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-16 h-16 bg-green-500/5 blur-2xl rounded-full -mr-8 -mt-8" />
           <p className="text-[10px] text-gray-500 font-black uppercase tracking-wider mb-1 relative z-10">إجمالي المكافآت</p>
-          <p className="text-2xl font-black text-green-500 relative z-10">{stats.totalRewards} <span className="text-xs">ل.س</span></p>
+          <div className="flex items-center justify-between relative z-10">
+            <p className="text-2xl font-black text-green-500">{user.points} <span className="text-xs">نقطة</span></p>
+            <button 
+              onClick={() => setShowRedeemModal(true)}
+              className="px-3 py-1.5 bg-green-500 text-black text-[10px] font-black rounded-lg shadow-lg shadow-green-500/20 active:scale-95 transition-all"
+            >
+              استبدال
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Redeem Points Modal */}
+      <AnimatePresence>
+        {showRedeemModal && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm bg-[#1a1c20] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <RefreshCw className="text-green-500 w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-bold text-white">استبدال النقاط</h3>
+                <p className="text-sm text-gray-400">كل 1 نقطة = 1 ليرة سورية</p>
+                <p className="text-[10px] text-cyan-500 font-bold">نقاطك الحالية: {user.points} نقطة</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest px-1">عدد النقاط للاستبدال</label>
+                  <input 
+                    type="number"
+                    value={redeemAmount}
+                    onChange={(e) => setRedeemAmount(e.target.value)}
+                    placeholder="أدخل عدد النقاط..."
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-green-500/50 transition-all font-mono"
+                  />
+                </div>
+
+                <button 
+                  onClick={handleRedeem}
+                  disabled={isRedeeming || !redeemAmount}
+                  className="w-full py-4 bg-green-500 text-black font-black rounded-2xl shadow-xl shadow-green-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  {isRedeeming ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 size={18} />}
+                  تأكيد الاستبدال
+                </button>
+
+                <button 
+                  onClick={() => setShowRedeemModal(false)}
+                  className="w-full py-2 text-gray-500 text-xs font-bold hover:text-white transition-colors"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Referral Code & Link */}
       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-6 space-y-4 relative overflow-hidden">
@@ -1391,8 +1509,8 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-black text-green-500">+1 ل.س</p>
-                  <p className="text-[8px] text-gray-500 uppercase font-bold">مكافأة</p>
+                  <p className="text-xs font-black text-green-500">+1 نقطة</p>
+                  <p className="text-[8px] text-gray-500 uppercase font-bold">مكافأة إحالة</p>
                 </div>
               </div>
             ))
@@ -1403,17 +1521,89 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
   );
 }
 
+function PurchaseModal({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  ticketNumber, 
+  balance, 
+  price 
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  onConfirm: () => void, 
+  ticketNumber: string, 
+  balance: number, 
+  price: number 
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <motion.div 
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="w-full max-w-sm bg-[#1a1c20] border border-white/10 rounded-3xl p-6 shadow-2xl space-y-6"
+      >
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 bg-cyan-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ShoppingCart className="text-cyan-500 w-8 h-8" />
+          </div>
+          <h3 className="text-xl font-bold text-white">تأكيد شراء الكرت</h3>
+          <p className="text-sm text-gray-400">أنت على وشك شراء الكرت رقم <span className="text-cyan-500 font-mono font-bold">{ticketNumber}</span></p>
+        </div>
+
+        <div className="space-y-3">
+          <button 
+            onClick={() => onConfirm()}
+            disabled={balance < price}
+            className={`w-full p-4 rounded-2xl border flex items-center justify-between transition-all ${
+              balance >= price 
+                ? 'bg-white/5 border-white/10 hover:border-cyan-500/50 hover:bg-white/10' 
+                : 'bg-black/20 border-white/5 opacity-50 cursor-not-allowed'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                <Wallet className="text-blue-500 w-5 h-5" />
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-white">شراء بالرصيد</p>
+                <p className="text-[10px] text-gray-500">رصيدك: {balance} ل.س</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-black text-white">{price}</p>
+              <p className="text-[10px] text-cyan-500 font-bold">ل.س</p>
+            </div>
+          </button>
+        </div>
+
+        <button 
+          onClick={onClose}
+          className="w-full py-3 text-gray-500 text-xs font-bold hover:text-white transition-colors"
+        >
+          إلغاء العملية
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User>({
     id: 'guest',
     name: 'زائر',
     balance: 0,
+    points: 0,
     tickets: []
   });
 
   const [winners, setWinners] = useState<{name: string, amount: number, ticket: string, rank: number}[]>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'shop' | 'tickets' | 'winners' | 'profile' | 'referral'>('home');
   const [ticketFilter, setTicketFilter] = useState<'all' | 'active' | 'winner' | 'expired'>('all');
+  const [selectedTicketForPurchase, setSelectedTicketForPurchase] = useState<{id: string, number: string} | null>(null);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [ticketSort, setTicketSort] = useState<'date-desc' | 'date-asc'>('date-desc');
   const [showDevGuide, setShowDevGuide] = useState(false);
   const [showMachine, setShowMachine] = useState(false);
@@ -1500,7 +1690,8 @@ export default function App() {
           const updatedProfile = payload.new as any;
           setUser(prev => ({
             ...prev,
-            balance: updatedProfile.balance || 0
+            balance: Number(updatedProfile.balance) || 0,
+            points: Number(updatedProfile.points) || 0
           }));
           setLastRewardAt(updatedProfile.last_daily_reward_at);
         }
@@ -1512,86 +1703,87 @@ export default function App() {
     };
   }, [supabaseUser]);
 
+  const fetchProfileData = useCallback(async () => {
+    if (!supabaseUser) return;
+    
+    // 1. Fetch Profile & Balance
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('*, referral_code, referred_by, points')
+      .eq('id', supabaseUser.id)
+      .single();
+      
+    // 2. Fetch User Tickets (Limited to 50 for summary)
+    const { data: ticketsData } = await supabase
+      .from('shop_tickets')
+      .select('id, number, created_at, is_sold')
+      .eq('owner_id', supabaseUser.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    // 3. Fetch Notifications
+    const { data: notifsData } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', supabaseUser.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (notifsData) {
+      setRealNotifications(notifsData);
+      setUnreadCount(notifsData.filter(n => !n.is_read).length);
+    }
+
+    if (profileData) {
+      setLastRewardAt(profileData.last_daily_reward_at);
+      const metadata = supabaseUser.user_metadata;
+      // Prioritize profile table data over auth metadata for consistency
+      const fullName = profileData.first_name && profileData.last_name 
+        ? `${profileData.first_name} ${profileData.last_name}`
+        : (metadata?.first_name && metadata?.last_name 
+            ? `${metadata.first_name} ${metadata.last_name}`
+            : (supabaseUser.email?.split('@')[0] || 'مستخدم'));
+
+      setUser({
+        id: supabaseUser.id,
+        name: fullName,
+        balance: Number(profileData.balance) || 0,
+        points: Number(profileData.points) || 0,
+        isFrozen: profileData.is_frozen || false,
+        referralCode: profileData.referral_code,
+        referredBy: profileData.referred_by,
+        tickets: (ticketsData || []).map(t => ({
+          id: t.id,
+          number: t.number,
+          purchaseDate: new Date(t.created_at).toISOString().split('T')[0],
+          status: t.is_sold ? 'active' : 'expired' // Simplified logic
+        }))
+      });
+    }
+  }, [supabaseUser]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await fetchProfileData();
+    // Also refresh winners and shop tickets
+    const { data: winnersData } = await supabase
+      .from('winners')
+      .select('*')
+      .order('rank', { ascending: true });
+    
+    if (winnersData) {
+      setWinners(winnersData.map(w => ({
+        name: w.user_name,
+        amount: w.amount,
+        ticket: w.ticket_number,
+        rank: w.rank
+      })));
+    }
+    
+    setIsRefreshing(false);
+  }, [fetchProfileData]);
+
   useEffect(() => {
-    const fetchProfileData = async () => {
-      if (!supabaseUser) return;
-      
-      // 1. Fetch Profile & Balance
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*, referral_code, referred_by')
-        .eq('id', supabaseUser.id)
-        .single();
-        
-      // 2. Fetch User Tickets (Limited to 50 for summary)
-      const { data: ticketsData } = await supabase
-        .from('shop_tickets')
-        .select('id, number, created_at, is_sold')
-        .eq('owner_id', supabaseUser.id)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      // 3. Fetch Notifications
-      const { data: notifsData } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', supabaseUser.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (notifsData) {
-        setRealNotifications(notifsData);
-        setUnreadCount(notifsData.filter(n => !n.is_read).length);
-      }
-
-      if (profileData) {
-        setLastRewardAt(profileData.last_daily_reward_at);
-        const metadata = supabaseUser.user_metadata;
-        // Prioritize profile table data over auth metadata for consistency
-        const fullName = profileData.first_name && profileData.last_name 
-          ? `${profileData.first_name} ${profileData.last_name}`
-          : (metadata?.first_name && metadata?.last_name 
-              ? `${metadata.first_name} ${metadata.last_name}`
-              : (supabaseUser.email?.split('@')[0] || 'مستخدم'));
-
-        setUser({
-          id: supabaseUser.id,
-          name: fullName,
-          balance: profileData.balance || 0,
-          isFrozen: profileData.is_frozen || false,
-          referralCode: profileData.referral_code,
-          referredBy: profileData.referred_by,
-          tickets: (ticketsData || []).map(t => ({
-            id: t.id,
-            number: t.number,
-            purchaseDate: new Date(t.created_at).toISOString().split('T')[0],
-            status: t.is_sold ? 'active' : 'expired' // Simplified logic
-          }))
-        });
-      }
-    };
-
-    const handleRefresh = async () => {
-      setIsRefreshing(true);
-      await fetchProfileData();
-      // Also refresh winners and shop tickets
-      const { data: winnersData } = await supabase
-        .from('winners')
-        .select('*')
-        .order('rank', { ascending: true });
-      
-      if (winnersData) {
-        setWinners(winnersData.map(w => ({
-          name: w.user_name,
-          amount: w.amount,
-          ticket: w.ticket_number,
-          rank: w.rank
-        })));
-      }
-      
-      setIsRefreshing(false);
-    };
-
     fetchProfileData();
 
     // 4. Real-time notifications subscription
@@ -1640,7 +1832,7 @@ export default function App() {
       window.removeEventListener('touchend', handleTouchEnd);
       if (channel) supabase.removeChannel(channel);
     };
-  }, [supabaseUser]); // Only refresh when user changes, not on every shop ticket update
+  }, [supabaseUser, fetchProfileData, handleRefresh]);
 
   // Fetch Winners
   useEffect(() => {
@@ -1916,7 +2108,6 @@ export default function App() {
       }
 
       const currentBalance = Number(currentProfile.balance) || 0;
-
       if (currentBalance < TICKET_PRICE) {
         addNotification('عذراً، رصيدك غير كافٍ لشراء الكرت', 'error');
         return false;
@@ -1930,7 +2121,6 @@ export default function App() {
       }
 
       // 2. تحديث الكرت في قاعدة البيانات مع التحقق من أنه لم يتم بيعه
-      // نستخدم count: 'exact' للتحقق من نجاح التحديث لأن select() قد تفشل مع المستخدمين العاديين بسبب RLS
       const { count, error: ticketError } = await supabase
         .from('shop_tickets')
         .update({ 
@@ -1946,50 +2136,24 @@ export default function App() {
       }
       
       if (count === 0) {
-        // إذا لم يتم تحديث أي صف، فهذا يعني إما أن الكرت بيع بالفعل أو أن هناك مشكلة في الصلاحيات
         addNotification('عذراً، هذا الكرت لم يعد متاحاً أو تم شراؤه بالفعل', 'error');
-        
-        // محاولة جلب الحالة الحقيقية للكرت للتأكد
-        const { data: checkTicket } = await supabase
-          .from('shop_tickets')
-          .select('is_sold')
-          .eq('number', ticketNumber)
-          .single();
-          
-        if (checkTicket?.is_sold) {
-          addNotification('تأكيد: الكرت مباع بالفعل لمستخدم آخر', 'error');
-        } else {
-          addNotification('تنبيه: قد تكون هناك مشكلة في صلاحيات الشراء، يرجى التواصل مع المسؤول', 'error');
-        }
-
-        // Refresh tickets list
-        const { data: freshTickets } = await supabase
-          .from('shop_tickets')
-          .select('id, number, is_sold')
-          .eq('level_index', currentLevelIndex)
-          .limit(displayLimit);
-        
-        if (freshTickets) {
-          setShopTickets(freshTickets.map(t => ({ id: t.id, number: t.number, sold: t.is_sold })));
-        }
         return false;
       }
 
       // 3. خصم الرصيد من قاعدة البيانات
-      const newBalance = currentBalance - TICKET_PRICE;
       const { data: updatedProfile, error: balanceError } = await supabase
         .from('profiles')
-        .update({ balance: newBalance })
+        .update({ balance: currentBalance - TICKET_PRICE })
         .eq('id', supabaseUser.id)
         .select();
 
       if (balanceError) throw balanceError;
 
-      const actualNewBalance = updatedProfile?.[0]?.balance ?? newBalance;
+      const actualNewBalance = updatedProfile?.[0]?.balance ?? (currentBalance - TICKET_PRICE);
 
       // 4. Update local state
       const newTicket: Ticket = {
-        id: Math.random().toString(36).substr(2, 9), // سنستخدم ID عشوائي مؤقت هنا
+        id: Math.random().toString(36).substr(2, 9),
         number: ticketNumber,
         purchaseDate: new Date().toISOString().split('T')[0],
         status: 'active'
@@ -2005,7 +2169,7 @@ export default function App() {
       await supabase.from('notifications').insert({
         user_id: supabaseUser.id,
         title: 'تم شراء كرت بنجاح',
-        message: `لقد قمت بشراء الكرت رقم ${ticketNumber} بنجاح. حظاً موفقاً في السحب القادم!`,
+        message: `لقد قمت بشراء الكرت رقم ${ticketNumber} بنجاح. حظاً موفقاً!`,
         type: 'success'
       });
       
@@ -2233,7 +2397,16 @@ export default function App() {
                 <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-3">
                     <div>
-                      <p className="text-[9px] text-gray-400 mb-0.5 uppercase tracking-wider font-bold">الرصيد المتوفر</p>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-[9px] text-gray-400 uppercase tracking-wider font-bold">الرصيد المتوفر</p>
+                        <button 
+                          onClick={handleRefresh}
+                          className="p-1 hover:bg-white/5 rounded-full transition-colors"
+                          title="تحديث الرصيد"
+                        >
+                          <RefreshCw className={`w-2.5 h-2.5 text-gray-500 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        </button>
+                      </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-3xl font-black tracking-tighter text-white drop-shadow-sm">{user.balance.toLocaleString()}</span>
                         <span className="text-[10px] text-cyan-500 font-bold">ل.س</span>
@@ -2548,9 +2721,8 @@ export default function App() {
                   const available = shopTickets.filter(t => !t.sold);
                   if (available.length > 0) {
                     const random = available[Math.floor(Math.random() * available.length)];
-                    if (await buyTicket(random.number)) {
-                      setShopTickets(prev => prev.map(t => t.id === random.id ? { ...t, sold: true } : t));
-                    }
+                    setSelectedTicketForPurchase({ id: random.id, number: random.number });
+                    setShowPurchaseModal(true);
                   }
                 }}
                 className={`px-4 py-2 rounded-xl font-black text-xs shadow-lg transition-all active:scale-95 ${
@@ -2708,10 +2880,9 @@ export default function App() {
                 <button 
                   key={ticket.id}
                   disabled={ticket.sold || isPurchasing}
-                  onClick={async () => {
-                    if (await buyTicket(ticket.number)) {
-                      setShopTickets(prev => prev.map(t => t.id === ticket.id ? { ...t, sold: true } : t));
-                    }
+                  onClick={() => {
+                    setSelectedTicketForPurchase({ id: ticket.id, number: ticket.number });
+                    setShowPurchaseModal(true);
                   }}
                   className={`relative aspect-square rounded-lg border flex flex-col items-center justify-center transition-all active:scale-90 ${
                     ticket.sold 
@@ -3720,6 +3891,23 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <PurchaseModal 
+        isOpen={showPurchaseModal}
+        onClose={() => setShowPurchaseModal(false)}
+        ticketNumber={selectedTicketForPurchase?.number || ''}
+        balance={user.balance}
+        price={TICKET_PRICE}
+        onConfirm={async () => {
+          if (selectedTicketForPurchase) {
+            const success = await buyTicket(selectedTicketForPurchase.number);
+            if (success) {
+              setShopTickets(prev => prev.map(t => t.id === selectedTicketForPurchase.id ? { ...t, sold: true } : t));
+              setShowPurchaseModal(false);
+            }
+          }
+        }}
+      />
     </div>
   );
 }

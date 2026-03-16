@@ -17,6 +17,7 @@ export interface User {
   id: string;
   name: string;
   balance: number;
+  points: number;
   tickets: Ticket[];
   isFrozen?: boolean;
   referralCode?: string;
