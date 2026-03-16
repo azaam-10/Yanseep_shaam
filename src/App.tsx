@@ -286,15 +286,17 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
 function AdminPanel({ 
   onClose, 
   requests, 
+  withdrawals,
   onRefresh, 
   addNotification 
 }: { 
   onClose: () => void, 
   requests: any[], 
+  withdrawals: any[],
   onRefresh: () => void,
   addNotification: (t: string, type?: 'success' | 'error') => void
 }) {
-  const [activeTab, setActiveTab] = useState<'requests' | 'tickets' | 'users' | 'settings'>('requests');
+  const [activeTab, setActiveTab] = useState<'requests' | 'withdrawals' | 'tickets' | 'users' | 'settings'>('requests');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rechargeAmount, setRechargeAmount] = useState<string>('');
   const [isInitializingStorage, setIsInitializingStorage] = useState(false);
@@ -446,8 +448,6 @@ function AdminPanel({
   };
 
   const handleReject = async (requestId: string) => {
-    if (!window.confirm('هل أنت متأكد من رفض هذا الطلب؟')) return;
-    
     setProcessingId(requestId);
     try {
       const { error } = await supabase
@@ -461,6 +461,66 @@ function AdminPanel({
     } catch (err: any) {
       console.error('Reject Error:', err);
       addNotification('حدث خطأ أثناء الرفض', 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleApproveWithdrawal = async (requestId: string, userId: string, amount: number) => {
+    setProcessingId(requestId);
+    try {
+      const { data: profileData, error: fetchError } = await supabase
+        .from('profiles')
+        .select('balance')
+        .eq('id', userId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      if ((profileData?.balance || 0) < amount) {
+        addNotification('رصيد المستخدم غير كافٍ لإتمام عملية السحب', 'error');
+        return;
+      }
+
+      const newBalance = (profileData?.balance || 0) - amount;
+
+      const { error: balanceError } = await supabase
+        .from('profiles')
+        .update({ balance: newBalance })
+        .eq('id', userId);
+      
+      if (balanceError) throw balanceError;
+
+      const { error: requestError } = await supabase
+        .from('withdrawal_requests')
+        .update({ status: 'approved' })
+        .eq('id', requestId);
+      
+      if (requestError) throw requestError;
+
+      addNotification(`تمت الموافقة على سحب ${amount} ل.س بنجاح`);
+      onRefresh();
+    } catch (err: any) {
+      console.error('Withdraw Approval Error:', err);
+      addNotification('حدث خطأ أثناء المعالجة: ' + (err.message || ''), 'error');
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRejectWithdrawal = async (requestId: string) => {
+    setProcessingId(requestId);
+    try {
+      const { error } = await supabase
+        .from('withdrawal_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId);
+      
+      if (error) throw error;
+      addNotification('تم رفض طلب السحب');
+      onRefresh();
+    } catch (err: any) {
+      addNotification('خطأ في الرفض: ' + err.message, 'error');
     } finally {
       setProcessingId(null);
     }
@@ -699,7 +759,13 @@ function AdminPanel({
           onClick={() => setActiveTab('requests')}
           className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'requests' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
         >
-          الطلبات ({requests.length})
+          الشحن ({requests.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('withdrawals')}
+          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'withdrawals' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
+        >
+          السحب ({withdrawals.length})
         </button>
         <button 
           onClick={() => setActiveTab('tickets')}
@@ -772,6 +838,51 @@ function AdminPanel({
                       onClick={() => handleReject(req.id)}
                       disabled={processingId === req.id}
                       className="bg-red-500/10 text-red-500 border border-red-500/20 font-black px-4 py-2 rounded-xl text-[10px] hover:bg-red-500/20 transition-all disabled:opacity-50"
+                    >
+                      رفض
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'withdrawals' && (
+          <div className="space-y-4">
+            {withdrawals.length === 0 ? (
+              <div className="py-20 text-center text-gray-500 text-xs font-bold">لا توجد طلبات سحب معلقة حالياً</div>
+            ) : (
+              withdrawals.map((req) => (
+                <div key={req.id} className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-white">{req.profiles?.first_name} {req.profiles?.last_name || 'مستخدم'}</p>
+                      <p className="text-[10px] text-gray-500">{new Date(req.created_at).toLocaleString('ar-SA')}</p>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-black text-red-500">{req.amount} ل.س</p>
+                      <p className="text-[9px] text-gray-500">الرصيد: {req.profiles?.balance} ل.س</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-black/40 border border-white/10 rounded-xl p-3 space-y-1">
+                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest text-right">عنوان شام كاش</p>
+                    <p className="text-xs font-mono text-white break-all text-right">{req.sham_cash_address}</p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleApproveWithdrawal(req.id, req.user_id, req.amount)}
+                      disabled={processingId === req.id}
+                      className="flex-1 bg-cyan-500 text-black font-black py-2.5 rounded-xl text-xs hover:bg-cyan-400 transition-all disabled:opacity-50"
+                    >
+                      {processingId === req.id ? <Loader2 className="animate-spin w-4 h-4 mx-auto" /> : 'موافقة على السحب'}
+                    </button>
+                    <button 
+                      onClick={() => handleRejectWithdrawal(req.id)}
+                      disabled={processingId === req.id}
+                      className="bg-red-500/10 text-red-500 border border-red-500/20 font-black px-4 py-2.5 rounded-xl text-xs hover:bg-red-500/20 transition-all disabled:opacity-50"
                     >
                       رفض
                     </button>
@@ -1590,6 +1701,144 @@ function PurchaseModal({
   );
 }
 
+function WithdrawModal({ 
+  user, 
+  onClose, 
+  addNotification 
+}: { 
+  user: User, 
+  onClose: () => void, 
+  addNotification: (t: string, type?: 'success' | 'error') => void 
+}) {
+  const [amount, setAmount] = useState('');
+  const [shamCash, setShamCash] = useState(user.shamCashAddress || '');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const withdrawAmount = Number(amount);
+
+    if (isNaN(withdrawAmount) || withdrawAmount < 100) {
+      addNotification('الحد الأدنى للسحب هو 100 ليرة سورية', 'error');
+      return;
+    }
+
+    if (withdrawAmount > user.balance) {
+      addNotification('عذراً، رصيدك غير كافٍ لهذا المبلغ', 'error');
+      return;
+    }
+
+    if (!shamCash.trim()) {
+      addNotification('يرجى إدخال عنوان شام كاش صحيح', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('withdrawal_requests')
+        .insert({
+          user_id: user.id,
+          amount: withdrawAmount,
+          sham_cash_address: shamCash,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+
+      // إرسال إشعار للمسؤول (اختياري، هنا نكتفي بإشعار المستخدم)
+      addNotification('تم إرسال طلب السحب بنجاح. سيتم مراجعته من قبل الإدارة.', 'success');
+      onClose();
+    } catch (err: any) {
+      console.error('Withdraw Error:', err);
+      addNotification('حدث خطأ أثناء إرسال الطلب: ' + (err.message || ''), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6"
+    >
+      <button 
+        onClick={onClose}
+        className="absolute top-8 right-8 p-3 bg-white/5 rounded-full hover:bg-white/10 transition-all"
+      >
+        <X size={24} />
+      </button>
+
+      <div className="w-full max-w-md space-y-6 text-center">
+        <div className="space-y-1">
+          <div className="w-16 h-16 bg-cyan-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <ArrowUpRight className="text-cyan-500 w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-black text-white">سحب الرصيد</h2>
+          <p className="text-gray-400 text-xs">أدخل المبلغ وعنوان شام كاش الخاص بك</p>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+          <div className="text-right">
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">الرصيد المتاح</p>
+            <p className="text-xl font-black text-white">{user.balance} <span className="text-xs text-cyan-500">ل.س</span></p>
+          </div>
+          <div className="text-left">
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">الحد الأدنى</p>
+            <p className="text-sm font-black text-gray-300">100 ل.س</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5 text-right">
+            <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1">عنوان شام كاش</label>
+            <input 
+              type="text" 
+              required
+              value={shamCash}
+              onChange={(e) => setShamCash(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-5 text-sm outline-none focus:border-cyan-500 transition-all text-center font-mono"
+              placeholder="أدخل عنوان محفظتك هنا"
+            />
+          </div>
+
+          <div className="space-y-1.5 text-right">
+            <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1">المبلغ المراد سحبه</label>
+            <input 
+              type="number" 
+              required
+              min="100"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-5 text-xl outline-none focus:border-cyan-500 transition-all text-center font-black"
+              placeholder="0.00"
+            />
+          </div>
+
+          <button 
+            type="submit"
+            disabled={loading || !amount || Number(amount) < 100 || Number(amount) > user.balance}
+            className="w-full bg-cyan-500 text-black font-black py-4 rounded-2xl text-lg shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="animate-spin w-6 h-6" /> : (
+              <>
+                <ArrowUpRight size={20} />
+                <span>تأكيد طلب السحب</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        <p className="text-[9px] text-gray-600 font-bold leading-relaxed">
+          تتم معالجة طلبات السحب يدوياً من قبل الإدارة خلال 24 ساعة. يرجى التأكد من صحة عنوان شام كاش لتجنب ضياع الرصيد.
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User>({
     id: 'guest',
@@ -1608,6 +1857,7 @@ export default function App() {
   const [showDevGuide, setShowDevGuide] = useState(false);
   const [showMachine, setShowMachine] = useState(false);
   const [showRecharge, setShowRecharge] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
   const [showRedeem, setShowRedeem] = useState(false);
   const [showActivityPanel, setShowActivityPanel] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -1632,6 +1882,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [adminRequests, setAdminRequests] = useState<any[]>([]);
+  const [adminWithdrawals, setAdminWithdrawals] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showDailyWheel, setShowDailyWheel] = useState(false);
@@ -2199,21 +2450,26 @@ export default function App() {
   const fetchAdminRequests = async () => {
     setAdminLoading(true);
     try {
-      console.log('Fetching admin requests for:', supabaseUser?.email);
-      const { data, error } = await supabase
-        .from('recharge_requests')
-        .select('*, profiles(first_name, last_name, balance)')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
+      const [rechargeRes, withdrawalRes] = await Promise.all([
+        supabase
+          .from('recharge_requests')
+          .select('*, profiles(first_name, last_name, balance)')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('withdrawal_requests')
+          .select('*, profiles(first_name, last_name, balance)')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+      ]);
       
-      if (error) {
-        console.error('Supabase Error fetching requests:', error);
-        throw error;
-      }
-      console.log('Fetched requests:', data?.length);
-      if (data) setAdminRequests(data);
+      if (rechargeRes.error) throw rechargeRes.error;
+      if (withdrawalRes.error) throw withdrawalRes.error;
+
+      if (rechargeRes.data) setAdminRequests(rechargeRes.data);
+      if (withdrawalRes.data) setAdminWithdrawals(withdrawalRes.data);
     } catch (err) {
-      console.error('Error fetching admin requests:', err);
+      console.error('Error fetching admin data:', err);
     } finally {
       setAdminLoading(false);
     }
@@ -2461,7 +2717,7 @@ export default function App() {
                           addNotification('يرجى تسجيل الدخول لسحب الرصيد', 'error');
                           setShowAuthModal(true);
                         } else {
-                          addNotification('خاصية السحب ستتوفر قريباً', 'error');
+                          setShowWithdraw(true);
                         }
                       }}
                       className="flex flex-col items-center gap-1 p-2.5 bg-gradient-to-br from-gray-700 to-gray-900 text-white rounded-xl hover:from-gray-600 hover:to-gray-800 transition-all active:scale-90 shadow-lg shadow-black/20"
@@ -3542,6 +3798,7 @@ export default function App() {
               <AdminPanel 
                 onClose={() => setShowAdminPanel(false)} 
                 requests={adminRequests} 
+                withdrawals={adminWithdrawals}
                 onRefresh={fetchAdminRequests}
                 addNotification={addNotification}
               />
@@ -3657,7 +3914,16 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Redeem Modal */}
+      {/* Withdraw Modal */}
+      <AnimatePresence>
+        {showWithdraw && (
+          <WithdrawModal 
+            user={user}
+            onClose={() => setShowWithdraw(false)} 
+            addNotification={addNotification}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {showRedeem && (
           <motion.div 

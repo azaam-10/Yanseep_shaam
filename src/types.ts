@@ -22,4 +22,5 @@ export interface User {
   isFrozen?: boolean;
   referralCode?: string;
   referredBy?: string;
+  shamCashAddress?: string;
 }
