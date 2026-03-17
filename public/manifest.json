@@ -1,0 +1,21 @@
+{
+  "name": "نصيب كاش - Naseeb Cash",
+  "short_name": "نصيب كاش",
+  "description": "منصة نصيب كاش للسحوبات والجوائز المالية، مكافآت يومية، نظام إحالة مربح، وجوائز قيمة.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#06b6d4",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/gold-bars.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/gold-bars.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

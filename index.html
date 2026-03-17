@@ -16,10 +16,22 @@
     <meta property="twitter:title" content="نصيب كاش - Naseeb Cash" />
     <meta property="twitter:description" content="انضم الآن إلى نصيب كاش واربح جوائز قيمة ومكافآت يومية!" />
     <meta property="twitter:image" content="https://images.unsplash.com/photo-1611974717537-48358a602217?q=80&w=1200&h=630&auto=format&fit=crop" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#06b6d4" />
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/gold-bars.png" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('SW registered!', reg))
+            .catch(err => console.log('SW registration failed!', err));
+        });
+      }
+    </script>
   </body>
 </html>
 

@@ -32,6 +32,7 @@ import {
   RefreshCw,
   Share2,
   Plus,
+  Download,
   Search,
   Eye,
   Trash2,
@@ -2037,7 +2038,7 @@ export default function App() {
 
   const [winners, setWinners] = useState<{name: string, amount: number, ticket: string, rank: number}[]>([]);
   const [activeTab, setActiveTab] = useState<'home' | 'shop' | 'tickets' | 'winners' | 'profile' | 'referral'>('home');
-  const [ticketFilter, setTicketFilter] = useState<'all' | 'active' | 'winner' | 'expired'>('all');
+  const [ticketFilter, setTicketFilter] = useState<'active' | 'winner' | 'expired'>('active');
   const [selectedTicketForPurchase, setSelectedTicketForPurchase] = useState<{id: string, number: string} | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [ticketSort, setTicketSort] = useState<'date-desc' | 'date-asc'>('date-desc');
@@ -2075,6 +2076,8 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showDailyWheel, setShowDailyWheel] = useState(false);
   const [lastRewardAt, setLastRewardAt] = useState<string | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
 
   const ADMIN_EMAILS = ['azaamazeez8876@gmail.com', 'rwanatiya3@gmail.com', 'azaamazeez1@gmail.com'];
   const isAdmin = supabaseUser?.email && ADMIN_EMAILS.includes(supabaseUser.email);
@@ -2108,8 +2111,32 @@ export default function App() {
       setSupabaseUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    const installHandler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      // Only show banner if not already in standalone mode
+      if (!window.matchMedia('(display-mode: standalone)').matches) {
+        setShowInstallBanner(true);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', installHandler);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('beforeinstallprompt', installHandler);
+    };
   }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      setShowInstallBanner(false);
+    }
+  };
 
   useEffect(() => {
     if (!supabaseUser) return;
@@ -2847,6 +2874,44 @@ export default function App() {
         </div>
       </header>
 
+      {/* Install App Banner */}
+      <AnimatePresence>
+        {showInstallBanner && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-cyan-500/10 border-b border-cyan-500/20 px-5 py-3 overflow-hidden"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                  <Coins className="text-black w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-white">تثبيت تطبيق نصيب كاش</h3>
+                  <p className="text-[10px] text-gray-400 font-medium">احصل على تجربة أسرع وأفضل عبر تثبيت التطبيق</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowInstallBanner(false)}
+                  className="p-2 text-gray-500 hover:text-white transition-colors"
+                >
+                  <X size={16} />
+                </button>
+                <button
+                  onClick={handleInstallClick}
+                  className="px-4 py-2 bg-cyan-500 text-black text-[10px] font-black rounded-xl shadow-lg shadow-cyan-500/20 active:scale-95 transition-all"
+                >
+                  تثبيت الآن
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Pull to Refresh Indicator */}
       <AnimatePresence>
         {isRefreshing && (
@@ -3119,8 +3184,8 @@ export default function App() {
               </div>
               
               <div className="space-y-2">
-                {user.tickets.length > 0 ? (
-                  user.tickets.slice(0, 3).map((ticket) => (
+                {user.tickets.filter(t => t.status === 'active').length > 0 ? (
+                  user.tickets.filter(t => t.status === 'active').slice(0, 3).map((ticket) => (
                     <motion.div 
                       layout
                       initial={{ opacity: 0, x: -20 }}
@@ -3453,7 +3518,6 @@ export default function App() {
                 {/* Filters */}
                 <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                   {[
-                    { id: 'all', label: 'الكل' },
                     { id: 'active', label: 'نشطة' },
                     { id: 'winner', label: 'رابحة' },
                     { id: 'expired', label: 'منتهية' }
@@ -3474,7 +3538,7 @@ export default function App() {
 
                 <div className="space-y-3">
                   {user.tickets
-                    .filter(t => ticketFilter === 'all' || t.status === ticketFilter)
+                    .filter(t => t.status === ticketFilter)
                     .sort((a, b) => {
                       const dateA = new Date(a.purchaseDate).getTime();
                       const dateB = new Date(b.purchaseDate).getTime();
@@ -3482,7 +3546,7 @@ export default function App() {
                     })
                     .length > 0 ? (
                     user.tickets
-                      .filter(t => ticketFilter === 'all' || t.status === ticketFilter)
+                      .filter(t => t.status === ticketFilter)
                       .sort((a, b) => {
                         const dateA = new Date(a.purchaseDate).getTime();
                         const dateB = new Date(b.purchaseDate).getTime();
@@ -3524,7 +3588,7 @@ export default function App() {
                     <div className="py-16 text-center bg-white/5 rounded-2xl border border-dashed border-white/10">
                       <TicketIcon size={40} className="mx-auto text-gray-600 mb-3" />
                       <p className="text-gray-500 font-bold text-sm">لا توجد كروت تطابق هذا الفلتر</p>
-                      <button onClick={() => { setTicketFilter('all'); setActiveTab('shop'); }} className="mt-3 text-cyan-500 font-bold text-xs">اذهب للمتجر الآن</button>
+                      <button onClick={() => { setTicketFilter('active'); setActiveTab('shop'); }} className="mt-3 text-cyan-500 font-bold text-xs">اذهب للمتجر الآن</button>
                     </div>
                   )}
                 </div>
@@ -3657,6 +3721,12 @@ export default function App() {
                         label: 'عن التطبيق', 
                         value: 'v1.0.4',
                         onClick: () => setShowAboutApp(true)
+                      },
+                      { 
+                        icon: <Download size={16} />, 
+                        label: 'تثبيت التطبيق', 
+                        value: 'PWA',
+                        onClick: handleInstallClick
                       },
                     ].map((item, i) => (
                       <button 
