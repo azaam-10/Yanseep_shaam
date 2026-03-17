@@ -20,12 +20,12 @@ DROP POLICY IF EXISTS "Users can insert their own withdrawal requests" ON public
 CREATE POLICY "Users can insert their own withdrawal requests" ON public.withdrawal_requests
     FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- السماح للمسؤولين برؤية وتحديث جميع الطلبات (يتم التعامل معها عبر الخدمة أو سياسات إضافية إذا لزم الأمر)
--- في هذا التطبيق، نفترض أن المسؤول يستخدم مفتاح الخدمة أو لديه صلاحيات واسعة
-CREATE POLICY "Admins can view all withdrawal requests" ON public.withdrawal_requests
+-- السماح للمسؤولين برؤية وتحديث جميع الطلبات
+DROP POLICY IF EXISTS "Admins can view all withdrawal requests" ON public.withdrawal_requests;
+CREATE POLICY "Admins can manage all withdrawal requests" ON public.withdrawal_requests
     FOR ALL USING (
         EXISTS (
             SELECT 1 FROM public.profiles
-            WHERE id = auth.uid() AND email = 'rwanatiya3@gmail.com' -- البريد الإلكتروني للمسؤول
+            WHERE id = auth.uid() AND (role = 'admin' OR email IN ('azaamazeez8876@gmail.com', 'rwanatiya3@gmail.com', 'azaamazeez1@gmail.com'))
         )
     );

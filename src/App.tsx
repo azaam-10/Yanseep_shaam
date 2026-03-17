@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { 
@@ -288,13 +288,17 @@ function AdminPanel({
   requests, 
   withdrawals,
   onRefresh, 
-  addNotification 
+  addNotification,
+  setRequests,
+  setWithdrawals
 }: { 
   onClose: () => void, 
   requests: any[], 
   withdrawals: any[],
   onRefresh: () => void,
-  addNotification: (t: string, type?: 'success' | 'error') => void
+  addNotification: (t: string, type?: 'success' | 'error') => void,
+  setRequests: React.Dispatch<React.SetStateAction<any[]>>,
+  setWithdrawals: React.Dispatch<React.SetStateAction<any[]>>
 }) {
   const [activeTab, setActiveTab] = useState<'requests' | 'withdrawals' | 'tickets' | 'users' | 'settings'>('requests');
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -436,9 +440,19 @@ function AdminPanel({
       
       if (requestError) throw requestError;
 
+      // 3. Add notification for user
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: 'تم قبول طلب الشحن',
+        message: `تمت الموافقة على طلب الشحن الخاص بك بمبلغ ${amount} ل.س. تم تحديث رصيدك الآن.`,
+        type: 'success'
+      });
+
       addNotification(`تم شحن ${amount} ل.س بنجاح`);
       setRechargeAmount('');
-      onRefresh();
+      
+      // Remove from local state immediately
+      setRequests(prev => prev.filter(r => r.id !== requestId));
     } catch (err: any) {
       console.error('Approve Error:', err);
       addNotification('حدث خطأ أثناء المعالجة: ' + (err.message || ''), 'error');
@@ -456,8 +470,20 @@ function AdminPanel({
         .eq('id', requestId);
       
       if (error) throw error;
+
+      // Add notification for user
+      const request = requests.find(r => r.id === requestId);
+      if (request) {
+        await supabase.from('notifications').insert({
+          user_id: request.user_id,
+          title: 'تم رفض طلب الشحن',
+          message: 'نعتذر، لقد تم رفض طلب الشحن الخاص بك. يرجى التأكد من صحة الإيصال والمحاولة مرة أخرى.',
+          type: 'error'
+        });
+      }
+
       addNotification('تم رفض الطلب بنجاح');
-      onRefresh();
+      setRequests(prev => prev.filter(r => r.id !== requestId));
     } catch (err: any) {
       console.error('Reject Error:', err);
       addNotification('حدث خطأ أثناء الرفض', 'error');
@@ -498,8 +524,16 @@ function AdminPanel({
       
       if (requestError) throw requestError;
 
+      // 3. Add notification for user
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title: 'تم قبول طلب السحب',
+        message: `تمت الموافقة على طلب السحب الخاص بك بمبلغ ${amount} ل.س. سيتم تحويل المبلغ إلى عنوان شام كاش الخاص بك قريباً.`,
+        type: 'success'
+      });
+
       addNotification(`تمت الموافقة على سحب ${amount} ل.س بنجاح`);
-      onRefresh();
+      setWithdrawals(prev => prev.filter(w => w.id !== requestId));
     } catch (err: any) {
       console.error('Withdraw Approval Error:', err);
       addNotification('حدث خطأ أثناء المعالجة: ' + (err.message || ''), 'error');
@@ -517,8 +551,22 @@ function AdminPanel({
         .eq('id', requestId);
       
       if (error) throw error;
+
+      // Add notification for user
+      const withdrawal = withdrawals.find(w => w.id === requestId);
+      if (withdrawal) {
+        await supabase.from('notifications').insert({
+          user_id: withdrawal.user_id,
+          title: 'تم رفض طلب السحب',
+          message: 'نعتذر، لقد تم رفض طلب السحب الخاص بك. يرجى التواصل مع الدعم الفني لمزيد من التفاصيل.',
+          type: 'error'
+        });
+      }
+
       addNotification('تم رفض طلب السحب');
-      onRefresh();
+      
+      // Remove from local state only after successful DB update
+      setWithdrawals(prev => prev.filter(w => w.id !== requestId));
     } catch (err: any) {
       addNotification('خطأ في الرفض: ' + err.message, 'error');
     } finally {
@@ -858,6 +906,7 @@ function AdminPanel({
                   <div className="flex justify-between items-start">
                     <div className="text-right">
                       <p className="text-sm font-bold text-white">{req.profiles?.first_name} {req.profiles?.last_name || 'مستخدم'}</p>
+                      <p className="text-[10px] text-gray-500">{req.profiles?.email}</p>
                       <p className="text-[10px] text-gray-500">{new Date(req.created_at).toLocaleString('ar-SA')}</p>
                     </div>
                     <div className="text-left">
@@ -1197,8 +1246,61 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
   const [rotation, setRotation] = useState(0);
   const [prize, setPrize] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
-  const prizes = [0.5, 1, 1.5, 2, 0.5, 1, 1.5, 2]; // 8 segments
+  const prizes = [1, 2, 3, 4, 5, 6, 7, 8, 10, 20, 50, 100]; // 12 segments
+
+  const playTick = () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.1);
+      
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } catch (e) {
+      console.error('Audio error:', e);
+    }
+  };
+
+  const playWin = () => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.5);
+      
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {
+      console.error('Audio error:', e);
+    }
+  };
 
   useEffect(() => {
     if (lastRewardAt) {
@@ -1230,21 +1332,58 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
   const spin = async () => {
     if (isSpinning || timeLeft) return;
     
+    // Probability logic
+    const rand = Math.random();
+    let wonAmount;
+    if (rand < 0.001) { // 1 in 1000 for big prizes (4+)
+      const bigPrizes = [4, 5, 6, 7, 8, 10, 20, 50, 100];
+      wonAmount = bigPrizes[Math.floor(Math.random() * bigPrizes.length)];
+    } else {
+      // Majority is 1, 2, or 3
+      const commonPrizes = [1, 2, 3];
+      wonAmount = commonPrizes[Math.floor(Math.random() * commonPrizes.length)];
+    }
+
+    const prizeIndex = prizes.indexOf(wonAmount);
+    const segmentSize = 360 / prizes.length;
+    const extraSpins = 8 + Math.floor(Math.random() * 5);
+    const targetPrizeRotation = (360 - (prizeIndex * segmentSize) - (segmentSize / 2));
+    const currentRotationBase = Math.ceil(rotation / 360) * 360;
+    const finalRotation = currentRotationBase + (360 * extraSpins) + targetPrizeRotation;
+    
     setIsSpinning(true);
     setPrize(null);
-    const spinRotation = 1800 + Math.random() * 360; // At least 5 full spins
-    setRotation(prev => prev + spinRotation);
+    setRotation(finalRotation);
+
+    // Sound effect during spin
+    let lastTickRotation = 0;
+    const startTime = Date.now();
+    const duration = 4000;
+    
+    const tickInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed >= duration) {
+        clearInterval(tickInterval);
+        return;
+      }
+      
+      // Ease out cubic approximation for rotation progress
+      const t = elapsed / duration;
+      const easeOut = 1 - Math.pow(1 - t, 3);
+      const currentRotation = rotation + (finalRotation - rotation) * easeOut;
+      
+      if (Math.floor(currentRotation / segmentSize) > Math.floor(lastTickRotation / segmentSize)) {
+        playTick();
+        lastTickRotation = currentRotation;
+      }
+    }, 16);
 
     setTimeout(async () => {
       setIsSpinning(false);
-      const finalRotation = (rotation + spinRotation) % 360;
-      const segmentSize = 360 / prizes.length;
-      const prizeIndex = Math.floor((360 - (finalRotation % 360)) / segmentSize) % prizes.length;
-      const wonAmount = prizes[prizeIndex];
       setPrize(wonAmount);
+      playWin();
       
       try {
-        // Use RPC for server-side time validation
         const { data, error } = await supabase.rpc('claim_daily_reward', {
           user_id: user.id,
           reward_amount: wonAmount
@@ -1259,7 +1398,6 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
           return;
         }
         
-        // Add to notifications table
         await supabase.from('notifications').insert({
           user_id: user.id,
           title: 'مكافأة يومية',
@@ -1273,7 +1411,7 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
         console.error('Daily Reward Error:', err);
         addNotification('حدث خطأ أثناء استلام المكافأة', 'error');
       }
-    }, 4000);
+    }, duration);
   };
 
   return (
@@ -1314,33 +1452,48 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
           {/* Outer Glow */}
           <div className="absolute inset-0 m-auto w-72 h-72 rounded-full bg-cyan-500/5 blur-3xl" />
 
+          {/* Outer Lights */}
+          {[...Array(12)].map((_, i) => (
+            <div 
+              key={i}
+              className={`absolute w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.8)] z-20 transition-all duration-300 ${isSpinning ? 'animate-pulse' : ''}`}
+              style={{
+                top: '50%',
+                left: '50%',
+                transform: `translate(-50%, -50%) rotate(${i * 30}deg) translateY(-155px)`
+              }}
+            />
+          ))}
+
           {/* The Wheel */}
           <motion.div 
             animate={{ rotate: rotation }}
             transition={{ duration: 4, ease: [0.45, 0.05, 0.55, 0.95] }}
-            className="w-64 h-64 rounded-full border-[12px] border-[#1a1c20] relative overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] z-10"
+            className="w-72 h-72 rounded-full border-[12px] border-[#1a1c20] relative overflow-hidden shadow-[0_0_60px_rgba(6,182,212,0.3)] z-10"
             style={{ 
-              background: 'conic-gradient(#06b6d4 0deg 45deg, #0891b2 45deg 90deg, #06b6d4 90deg 135deg, #0891b2 135deg 180deg, #06b6d4 180deg 225deg, #0891b2 225deg 270deg, #06b6d4 270deg 315deg, #0891b2 315deg 360deg)'
+              background: 'conic-gradient(#06b6d4 0deg 30deg, #0891b2 30deg 60deg, #06b6d4 60deg 90deg, #0891b2 90deg 120deg, #06b6d4 120deg 150deg, #0891b2 150deg 180deg, #06b6d4 180deg 210deg, #0891b2 210deg 240deg, #06b6d4 240deg 270deg, #0891b2 270deg 300deg, #06b6d4 300deg 330deg, #0891b2 330deg 360deg)'
             }}
           >
             {prizes.map((p, i) => (
               <div 
                 key={i}
                 className="absolute top-0 left-1/2 -translate-x-1/2 h-1/2 origin-bottom flex flex-col items-center pt-6"
-                style={{ transform: `translateX(-50%) rotate(${i * 45 + 22.5}deg)` }}
+                style={{ transform: `translateX(-50%) rotate(${i * 30 + 15}deg)` }}
               >
                 <div className="flex flex-col items-center gap-1">
                   <span className="text-white font-black text-lg drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">{p}</span>
                   <span className="text-[6px] text-white/60 font-bold uppercase tracking-tighter">ل.س</span>
                 </div>
+                {/* Decorative Dot */}
+                <div className="w-1 h-1 bg-white/40 rounded-full mt-2" />
               </div>
             ))}
             {/* Inner Ring */}
-            <div className="absolute inset-0 m-auto w-48 h-48 rounded-full border border-white/10 pointer-events-none" />
+            <div className="absolute inset-0 m-auto w-56 h-56 rounded-full border border-white/10 pointer-events-none" />
             
             {/* Center Cap */}
-            <div className="absolute inset-0 m-auto w-14 h-14 bg-[#0a0a0a] rounded-full border-4 border-[#1a1c20] flex items-center justify-center shadow-2xl z-20">
-              <div className="w-4 h-4 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_15px_rgba(6,182,212,0.5)]" />
+            <div className="absolute inset-0 m-auto w-16 h-16 bg-[#0a0a0a] rounded-full border-4 border-[#1a1c20] flex items-center justify-center shadow-2xl z-20">
+              <div className="w-6 h-6 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_20px_rgba(6,182,212,0.8)]" />
             </div>
           </motion.div>
         </div>
@@ -1746,7 +1899,14 @@ function WithdrawModal({
 
       if (error) throw error;
 
-      // إرسال إشعار للمسؤول (اختياري، هنا نكتفي بإشعار المستخدم)
+      // إرسال إشعار للمستخدم في قاعدة البيانات
+      await supabase.from('notifications').insert({
+        user_id: user.id,
+        title: 'طلب سحب قيد المراجعة',
+        message: `لقد تم استلام طلب السحب الخاص بك بمبلغ ${withdrawAmount} ل.س بنجاح. سيتم مراجعته من قبل الإدارة قريباً.`,
+        type: 'info'
+      });
+
       addNotification('تم إرسال طلب السحب بنجاح. سيتم مراجعته من قبل الإدارة.', 'success');
       onClose();
     } catch (err: any) {
@@ -1888,7 +2048,7 @@ export default function App() {
   const [showDailyWheel, setShowDailyWheel] = useState(false);
   const [lastRewardAt, setLastRewardAt] = useState<string | null>(null);
 
-  const ADMIN_EMAILS = ['azaamazeez8876@gmail.com', 'rwanatiya3@gmail.com'];
+  const ADMIN_EMAILS = ['azaamazeez8876@gmail.com', 'rwanatiya3@gmail.com', 'azaamazeez1@gmail.com'];
   const isAdmin = supabaseUser?.email && ADMIN_EMAILS.includes(supabaseUser.email);
 
   const canClaimReward = !lastRewardAt || new Date(lastRewardAt).toDateString() !== new Date().toDateString();
@@ -2453,12 +2613,12 @@ export default function App() {
       const [rechargeRes, withdrawalRes] = await Promise.all([
         supabase
           .from('recharge_requests')
-          .select('*, profiles(first_name, last_name, balance)')
+          .select('*, profiles(first_name, last_name, balance, email)')
           .eq('status', 'pending')
           .order('created_at', { ascending: false }),
         supabase
           .from('withdrawal_requests')
-          .select('*, profiles(first_name, last_name, balance)')
+          .select('*, profiles(first_name, last_name, balance, email)')
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
       ]);
@@ -2466,10 +2626,16 @@ export default function App() {
       if (rechargeRes.error) throw rechargeRes.error;
       if (withdrawalRes.error) throw withdrawalRes.error;
 
-      if (rechargeRes.data) setAdminRequests(rechargeRes.data);
-      if (withdrawalRes.data) setAdminWithdrawals(withdrawalRes.data);
-    } catch (err) {
+      console.log('Admin Data Fetched:', { 
+        recharge: rechargeRes.data?.length, 
+        withdrawals: withdrawalRes.data?.length 
+      });
+
+      setAdminRequests(rechargeRes.data || []);
+      setAdminWithdrawals(withdrawalRes.data || []);
+    } catch (err: any) {
       console.error('Error fetching admin data:', err);
+      addNotification('فشل في جلب بيانات الإدارة: ' + (err.message || ''), 'error');
     } finally {
       setAdminLoading(false);
     }
@@ -2730,7 +2896,10 @@ export default function App() {
 
                 {isAdmin && (
                   <button 
-                    onClick={() => setShowAdminPanel(true)}
+                    onClick={() => {
+                      setShowAdminPanel(true);
+                      fetchAdminRequests();
+                    }}
                     className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-black font-black py-3 rounded-xl shadow-xl shadow-cyan-500/20 hover:from-cyan-400 hover:to-blue-500 transition-all mb-4 border border-white/10"
                   >
                     <ShieldCheck size={18} />
@@ -3801,6 +3970,8 @@ export default function App() {
                 withdrawals={adminWithdrawals}
                 onRefresh={fetchAdminRequests}
                 addNotification={addNotification}
+                setRequests={setAdminRequests}
+                setWithdrawals={setAdminWithdrawals}
               />
             </motion.div>
           </motion.div>
