@@ -586,16 +586,14 @@ function AdminPanel({
     addNotification('جاري تحديث الكروت...');
     setIsAddingTickets(true);
     try {
-      // 1. جلب أرقام الكروت المباعة حالياً في هذا المستوى لتجنب تكرارها
-      const { data: soldTickets } = await supabase
+      // 1. Mark all currently sold tickets for this level as inactive (expired)
+      await supabase
         .from('shop_tickets')
-        .select('number')
+        .update({ is_active: false })
         .eq('level_index', level)
         .eq('is_sold', true);
       
-      const soldNumbers = new Set(soldTickets?.map(t => t.number) || []);
-
-      // 2. مسح الكروت *غير المباعة* فقط لهذا المستوى
+      // 2. Delete all unsold tickets for this level
       const { error: deleteError } = await supabase
         .from('shop_tickets')
         .delete()
@@ -604,17 +602,16 @@ function AdminPanel({
       
       if (deleteError) throw deleteError;
 
-      // 3. تجهيز الكروت الجديدة (مع تخطي الأرقام المباعة بالفعل)
+      // 3. Prepare new tickets
       const tickets = [];
       for (let i = start; i <= end; i++) {
         const num = i.toString().padStart(6, '0');
-        if (!soldNumbers.has(num)) {
-          tickets.push({
-            number: num,
-            level_index: level,
-            is_sold: false
-          });
-        }
+        tickets.push({
+          number: num,
+          level_index: level,
+          is_sold: false,
+          is_active: true
+        });
       }
       
       // 4. الإضافة على دفعات
@@ -648,9 +645,16 @@ function AdminPanel({
     }
     
     setShowDeleteConfirm(false);
-    addNotification('جاري حذف الكروت غير المباعة...');
+    addNotification('جاري حذف الكروت غير المباعة وأرشفة المباعة...');
     setIsDeletingTickets(true);
     try {
+      // 1. Mark all sold tickets as inactive
+      await supabase
+        .from('shop_tickets')
+        .update({ is_active: false })
+        .eq('is_sold', true);
+
+      // 2. Delete all unsold tickets
       const { error } = await supabase
         .from('shop_tickets')
         .delete()
@@ -2142,7 +2146,7 @@ export default function App() {
     // 2. Fetch User Tickets (Limited to 50 for summary)
     const { data: ticketsData } = await supabase
       .from('shop_tickets')
-      .select('id, number, created_at, is_sold')
+      .select('id, number, created_at, is_sold, is_active')
       .eq('owner_id', supabaseUser.id)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -2182,7 +2186,7 @@ export default function App() {
           id: t.id,
           number: t.number,
           purchaseDate: new Date(t.created_at).toISOString().split('T')[0],
-          status: t.is_sold ? 'active' : 'expired' // Simplified logic
+          status: t.is_sold ? (t.is_active ? 'active' : 'expired') : 'expired'
         }))
       });
     }
@@ -2331,13 +2335,15 @@ export default function App() {
         const { count: totalCount } = await supabase
           .from('shop_tickets')
           .select('*', { count: 'exact', head: true })
-          .eq('level_index', currentLevelIndex);
+          .eq('level_index', currentLevelIndex)
+          .eq('is_active', true);
         
         const { count: soldCount } = await supabase
           .from('shop_tickets')
           .select('*', { count: 'exact', head: true })
           .eq('level_index', currentLevelIndex)
-          .eq('is_sold', true);
+          .eq('is_sold', true)
+          .eq('is_active', true);
 
         setTotalLevelTickets(totalCount || LEVELS[currentLevelIndex].tickets);
         setSoldLevelTickets(soldCount || 0);
@@ -2348,6 +2354,7 @@ export default function App() {
         .from('shop_tickets')
         .select('id, number, is_sold')
         .eq('level_index', currentLevelIndex)
+        .eq('is_active', true)
         .order('number', { ascending: true })
         .limit(displayLimit);
       
@@ -2391,22 +2398,46 @@ export default function App() {
         filter: `level_index=eq.${currentLevelIndex}`
       }, (payload) => {
         if (payload.eventType === 'UPDATE') {
+          // Handle archiving (is_active: false)
+          if (payload.new.is_active === false && payload.old.is_active === true) {
+            setShopTickets(prev => prev.filter(t => t.id !== payload.new.id));
+            setTotalLevelTickets(prev => Math.max(0, prev - 1));
+            if (payload.old.is_sold) setSoldLevelTickets(prev => Math.max(0, prev - 1));
+            return;
+          }
+          
+          // Handle activation (is_active: true) - though rare in this app
+          if (payload.new.is_active === true && payload.old.is_active === false) {
+            setTotalLevelTickets(prev => prev + 1);
+            if (payload.new.is_sold) setSoldLevelTickets(prev => prev + 1);
+            setShopTickets(prev => {
+              if (prev.length >= displayLimit) return prev;
+              const newTicket = { id: payload.new.id, number: payload.new.number, sold: payload.new.is_sold };
+              return [...prev, newTicket].sort((a, b) => a.number.localeCompare(b.number));
+            });
+            return;
+          }
+
+          // Handle normal sold status update
           setShopTickets(prev => prev.map(t => 
-            t.number === payload.new.number ? { ...t, sold: payload.new.is_sold } : t
+            t.id === payload.new.id ? { ...t, sold: payload.new.is_sold } : t
           ));
-          // Update sold count
+          
           if (payload.new.is_sold && !payload.old.is_sold) {
             setSoldLevelTickets(prev => prev + 1);
           } else if (!payload.new.is_sold && payload.old.is_sold) {
-            setSoldLevelTickets(prev => prev - 1);
+            setSoldLevelTickets(prev => Math.max(0, prev - 1));
           }
         } else if (payload.eventType === 'INSERT') {
+          if (payload.new.is_active === false) return;
+
           setTotalLevelTickets(prev => prev + 1);
           if (payload.new.is_sold) setSoldLevelTickets(prev => prev + 1);
           
           setShopTickets(prev => {
             if (prev.length >= displayLimit) return prev;
             if (searchQuery && !payload.new.number.includes(searchQuery)) return prev;
+            if (prev.some(t => t.id === payload.new.id)) return prev;
             
             return [...prev, {
               id: payload.new.id,
@@ -2415,8 +2446,12 @@ export default function App() {
             }].sort((a, b) => a.number.localeCompare(b.number));
           });
         } else if (payload.eventType === 'DELETE') {
+          // Only update counts if the deleted ticket was active
+          // Note: payload.old only contains the ID usually unless full replication is on
           setTotalLevelTickets(prev => Math.max(0, prev - 1));
           setShopTickets(prev => prev.filter(t => t.id !== payload.old.id));
+          // We can't easily know if it was sold without full replication, 
+          // but usually we delete unsold ones.
         }
       })
       .subscribe();
@@ -2546,7 +2581,7 @@ export default function App() {
         return false;
       }
 
-      // 2. تحديث الكرت في قاعدة البيانات مع التحقق من أنه لم يتم بيعه
+      // 2. تحديث الكرت في قاعدة البيانات مع التحقق من أنه لم يتم بيعه وأنه نشط
       const { count, error: ticketError } = await supabase
         .from('shop_tickets')
         .update({ 
@@ -2554,7 +2589,8 @@ export default function App() {
           owner_id: supabaseUser.id 
         }, { count: 'exact' })
         .eq('number', ticketNumber)
-        .eq('is_sold', false);
+        .eq('is_sold', false)
+        .eq('is_active', true);
 
       if (ticketError) {
         console.error('Ticket Update Error:', ticketError);
