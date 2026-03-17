@@ -51,7 +51,7 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [age, setAge] = useState('');
-  const [naseebCash, setNaseebCash] = useState('');
+  const [shamCash, setShamCash] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -102,7 +102,7 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
               first_name: firstName,
               last_name: lastName,
               age: !isNaN(Number(ageValue)) ? ageValue : null,
-              sham_cash_address: naseebCash,
+              sham_cash_address: shamCash,
               email: email,
               referred_by: referredBy
             }
@@ -196,14 +196,14 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
               />
             </div>
             <div className="space-y-1 col-span-2">
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-1">عنوان نصيب كاش</label>
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-1">عنوان شام كاش</label>
               <input 
                 type="text" 
                 required
-                value={naseebCash}
-                onChange={(e) => setNaseebCash(e.target.value)}
+                value={shamCash}
+                onChange={(e) => setShamCash(e.target.value)}
                 className="w-full bg-white/[0.03] border border-white/10 rounded-xl py-2.5 px-4 text-sm focus:border-cyan-500/50 focus:bg-white/[0.05] outline-none transition-all"
-                placeholder="NASEEB-XXXX-XXXX"
+                placeholder="SHAM-XXXX-XXXX"
               />
             </div>
           </motion.div>
@@ -528,7 +528,7 @@ function AdminPanel({
       await supabase.from('notifications').insert({
         user_id: userId,
         title: 'تم قبول طلب السحب',
-        message: `تمت الموافقة على طلب السحب الخاص بك بمبلغ ${amount} ل.س. سيتم تحويل المبلغ إلى عنوان نصيب كاش الخاص بك قريباً.`,
+        message: `تمت الموافقة على طلب السحب الخاص بك بمبلغ ${amount} ل.س. سيتم تحويل المبلغ إلى عنوان شام كاش الخاص بك قريباً.`,
         type: 'success'
       });
 
@@ -920,7 +920,7 @@ function AdminPanel({
                   </div>
 
                   <div className="bg-black/40 border border-white/10 rounded-xl p-3 space-y-1">
-                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest text-right">عنوان نصيب كاش</p>
+                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest text-right">عنوان شام كاش</p>
                     <p className="text-xs font-mono text-white break-all text-right">{req.sham_cash_address}</p>
                   </div>
 
@@ -1090,7 +1090,7 @@ function AdminPanel({
                       </p>
                     </div>
                     <div className="col-span-2 bg-white/[0.02] border border-white/5 rounded-xl p-3">
-                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">عنوان نصيب كاش</p>
+                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">عنوان شام كاش</p>
                       <p className="text-xs font-bold text-cyan-500 break-all">{foundUser.sham_cash_address || 'لم يتم إدخاله'}</p>
                     </div>
                   </div>
@@ -1459,7 +1459,7 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
             <Gift className="text-cyan-500 w-8 h-8" />
           </motion.div>
           <h2 className="text-2xl font-black text-white tracking-tight">عجلة الحظ الملكية</h2>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Naseeb Daily Rewards</p>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Sham Daily Rewards</p>
         </div>
 
         <div className="relative flex justify-center mb-10">
@@ -1646,7 +1646,7 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
 
   const shareWhatsApp = () => {
     if (!user.referralCode) return;
-    const text = `🔥 فرصة العمر بين يديك! انضم الآن إلى تطبيق 'نصيب كاش' وافتح أبواب الحظ! 💸
+    const text = `🔥 فرصة العمر بين يديك! انضم الآن إلى تطبيق 'شام كاش' وافتح أبواب الحظ! 💸
 
 🎡 عجلة الحظ تمنحك مكافآت يومية مجانية بدون توقف!
 💰 نظام إحالة جبار: اكسب رصيداً كاش فورياً عن كل شخص ينضم من طرفك!
@@ -1890,7 +1890,7 @@ function WithdrawModal({
   addNotification: (t: string, type?: 'success' | 'error') => void 
 }) {
   const [amount, setAmount] = useState('');
-  const [naseebCash, setNaseebCash] = useState(user.shamCashAddress || '');
+  const [shamCash, setShamCash] = useState(user.shamCashAddress || '');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1907,8 +1907,8 @@ function WithdrawModal({
       return;
     }
 
-    if (!naseebCash.trim()) {
-      addNotification('يرجى إدخال عنوان نصيب كاش صحيح', 'error');
+    if (!shamCash.trim()) {
+      addNotification('يرجى إدخال عنوان شام كاش صحيح', 'error');
       return;
     }
 
@@ -1919,7 +1919,7 @@ function WithdrawModal({
         .insert({
           user_id: user.id,
           amount: withdrawAmount,
-          sham_cash_address: naseebCash,
+          sham_cash_address: shamCash,
           status: 'pending'
         });
 
@@ -1963,7 +1963,7 @@ function WithdrawModal({
             <ArrowUpRight className="text-cyan-500 w-8 h-8" />
           </div>
           <h2 className="text-2xl font-black text-white">سحب الرصيد</h2>
-          <p className="text-gray-400 text-xs">أدخل المبلغ وعنوان نصيب كاش الخاص بك</p>
+          <p className="text-gray-400 text-xs">أدخل المبلغ وعنوان شام كاش الخاص بك</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
@@ -1979,12 +1979,12 @@ function WithdrawModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5 text-right">
-            <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1">عنوان نصيب كاش</label>
+            <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1">عنوان شام كاش</label>
             <input 
               type="text" 
               required
-              value={naseebCash}
-              onChange={(e) => setNaseebCash(e.target.value)}
+              value={shamCash}
+              onChange={(e) => setShamCash(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-xl py-4 px-5 text-sm outline-none focus:border-cyan-500 transition-all text-center font-mono"
               placeholder="أدخل عنوان محفظتك هنا"
             />
@@ -2018,7 +2018,7 @@ function WithdrawModal({
         </form>
 
         <p className="text-[9px] text-gray-600 font-bold leading-relaxed">
-          تتم معالجة طلبات السحب يدوياً من قبل الإدارة خلال 24 ساعة. يرجى التأكد من صحة عنوان نصيب كاش لتجنب ضياع الرصيد.
+          تتم معالجة طلبات السحب يدوياً من قبل الإدارة خلال 24 ساعة. يرجى التأكد من صحة عنوان شام كاش لتجنب ضياع الرصيد.
         </p>
       </div>
     </motion.div>
@@ -2807,8 +2807,8 @@ export default function App() {
             <Trophy className="text-black w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-tight text-white font-serif italic">نصيب كاش</h1>
-            <p className="text-[8px] text-cyan-500 uppercase tracking-[0.2em] font-bold">Naseeb Cash</p>
+            <h1 className="text-lg font-black tracking-tight text-white font-serif italic">شام كاش</h1>
+            <p className="text-[8px] text-cyan-500 uppercase tracking-[0.2em] font-bold">Sham Cash</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -4076,7 +4076,7 @@ export default function App() {
             <div className="w-full max-w-md space-y-5 text-center py-6">
               <div className="space-y-1">
                 <h2 className="text-xl font-bold text-cyan-500">شحن الرصيد</h2>
-                <p className="text-gray-400 text-xs">قم بتحويل المبلغ إلى عنوان نصيب كاش التالي وأرفق صورة الإشعار</p>
+                <p className="text-gray-400 text-xs">قم بتحويل المبلغ إلى عنوان شام كاش التالي وأرفق صورة الإشعار</p>
               </div>
 
               {/* QR Code Section */}
@@ -4316,14 +4316,14 @@ export default function App() {
                 <Trophy size={40} className="text-cyan-500" />
               </div>
               <div className="space-y-2">
-                <h2 className="text-2xl font-black text-white">نصيب كاش</h2>
+                <h2 className="text-2xl font-black text-white">شام كاش</h2>
                 <p className="text-gray-500 text-sm font-bold uppercase tracking-widest">الإصدار v1.0.4</p>
               </div>
               <div className="space-y-4 text-gray-400 text-sm leading-relaxed">
-                <p>تطبيق نصيب كاش هو منصة ترفيهية تتيح للمستخدمين شراء الكروت والمشاركة في سحوبات أسبوعية وجوائز قيمة.</p>
+                <p>تطبيق شام كاش هو منصة ترفيهية تتيح للمستخدمين شراء الكروت والمشاركة في سحوبات أسبوعية وجوائز قيمة.</p>
                 <div className="pt-4 border-t border-white/5 space-y-2">
                   <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">المطور</p>
-                  <p className="text-cyan-500 font-black">Naseeb Dev Team</p>
+                  <p className="text-cyan-500 font-black">Sham Dev Team</p>
                 </div>
               </div>
               <button 
