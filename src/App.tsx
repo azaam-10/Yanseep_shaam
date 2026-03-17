@@ -5,6 +5,7 @@ import {
   Wallet, 
   Ticket as TicketIcon, 
   Trophy, 
+  Coins,
   History, 
   User as UserIcon, 
   ArrowUpRight, 
@@ -1459,7 +1460,7 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
             <Gift className="text-cyan-500 w-8 h-8" />
           </motion.div>
           <h2 className="text-2xl font-black text-white tracking-tight">عجلة الحظ الملكية</h2>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Sham Daily Rewards</p>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Naseeb Daily Rewards</p>
         </div>
 
         <div className="relative flex justify-center mb-10">
@@ -1646,7 +1647,7 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
 
   const shareWhatsApp = () => {
     if (!user.referralCode) return;
-    const text = `🔥 فرصة العمر بين يديك! انضم الآن إلى تطبيق 'شام كاش' وافتح أبواب الحظ! 💸
+    const text = `🔥 فرصة العمر بين يديك! انضم الآن إلى تطبيق 'نصيب كاش' وافتح أبواب الحظ! 💸
 
 🎡 عجلة الحظ تمنحك مكافآت يومية مجانية بدون توقف!
 💰 نظام إحالة جبار: اكسب رصيداً كاش فورياً عن كل شخص ينضم من طرفك!
@@ -2803,12 +2804,12 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-50 bg-black/60 backdrop-blur-2xl border-b border-white/5 px-5 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20 rotate-3">
-            <Trophy className="text-black w-5 h-5" />
+          <div className="w-9 h-9 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/20 rotate-3">
+            <Coins className="text-black w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-tight text-white font-serif italic">شام كاش</h1>
-            <p className="text-[8px] text-cyan-500 uppercase tracking-[0.2em] font-bold">Sham Cash</p>
+            <h1 className="text-lg font-black tracking-tight text-white font-serif italic">نصيب كاش</h1>
+            <p className="text-[8px] text-cyan-500 uppercase tracking-[0.2em] font-bold">Naseeb Cash</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -4312,18 +4313,18 @@ export default function App() {
               className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 text-center space-y-6"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="w-20 h-20 bg-cyan-500/10 rounded-2xl flex items-center justify-center mx-auto border border-cyan-500/20">
-                <Trophy size={40} className="text-cyan-500" />
+              <div className="w-20 h-20 bg-yellow-500/10 rounded-2xl flex items-center justify-center mx-auto border border-yellow-500/20">
+                <Coins size={40} className="text-yellow-500" />
               </div>
               <div className="space-y-2">
-                <h2 className="text-2xl font-black text-white">شام كاش</h2>
+                <h2 className="text-2xl font-black text-white">نصيب كاش</h2>
                 <p className="text-gray-500 text-sm font-bold uppercase tracking-widest">الإصدار v1.0.4</p>
               </div>
               <div className="space-y-4 text-gray-400 text-sm leading-relaxed">
-                <p>تطبيق شام كاش هو منصة ترفيهية تتيح للمستخدمين شراء الكروت والمشاركة في سحوبات أسبوعية وجوائز قيمة.</p>
+                <p>تطبيق نصيب كاش هو منصة ترفيهية تتيح للمستخدمين شراء الكروت والمشاركة في سحوبات أسبوعية وجوائز قيمة.</p>
                 <div className="pt-4 border-t border-white/5 space-y-2">
                   <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">المطور</p>
-                  <p className="text-cyan-500 font-black">Sham Dev Team</p>
+                  <p className="text-cyan-500 font-black">Naseeb Dev Team</p>
                 </div>
               </div>
               <button 
