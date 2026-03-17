@@ -1459,7 +1459,7 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
             <Gift className="text-cyan-500 w-8 h-8" />
           </motion.div>
           <h2 className="text-2xl font-black text-white tracking-tight">عجلة الحظ الملكية</h2>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Elite Daily Rewards</p>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Naseeb Daily Rewards</p>
         </div>
 
         <div className="relative flex justify-center mb-10">
@@ -1646,7 +1646,14 @@ function ReferralDashboard({ user, addNotification }: { user: User, addNotificat
 
   const shareWhatsApp = () => {
     if (!user.referralCode) return;
-    const text = `انضم إلي في يانصيب الشام واربح جوائز قيمة! سجل من خلال رابطي واحصل على ميزات إضافية: ${referralLink}`;
+    const text = `🔥 فرصة العمر بين يديك! انضم الآن إلى تطبيق 'نصيب كاش' وافتح أبواب الحظ! 💸
+
+🎡 عجلة الحظ تمنحك مكافآت يومية مجانية بدون توقف!
+💰 نظام إحالة جبار: اكسب رصيداً كاش فورياً عن كل شخص ينضم من طرفك!
+🏆 سحوبات كبرى وجوائز قيمة بانتظار المحظوظين!
+
+سجل الآن من رابطي وابدأ بجني الأرباح فوراً:
+${referralLink}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -2052,6 +2059,7 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAboutApp, setShowAboutApp] = useState(false);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [shopTickets, setShopTickets] = useState<{id: string, number: string, sold: boolean}[]>([]);
@@ -2798,8 +2806,8 @@ export default function App() {
             <Trophy className="text-black w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-lg font-black tracking-tight text-white font-serif italic">شام لوتري</h1>
-            <p className="text-[8px] text-cyan-500 uppercase tracking-[0.2em] font-bold">The Royal Draw</p>
+            <h1 className="text-lg font-black tracking-tight text-white font-serif italic">نصيب كاش</h1>
+            <p className="text-[8px] text-cyan-500 uppercase tracking-[0.2em] font-bold">Naseeb Cash</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -3630,11 +3638,30 @@ export default function App() {
                   <h3 className="text-[11px] font-bold text-gray-400 px-2">الإعدادات العامة</h3>
                   <div className="bg-white/5 border border-white/5 rounded-2xl overflow-hidden">
                     {[
-                      { icon: <Bell size={16} />, label: 'الإشعارات', value: 'مفعل' },
-                      { icon: <Settings size={16} />, label: 'اللغة', value: 'العربية' },
-                      { icon: <Info size={16} />, label: 'عن التطبيق', value: 'v1.0.4' },
+                      { 
+                        icon: <Bell size={16} />, 
+                        label: 'الإشعارات', 
+                        value: 'مفعل',
+                        onClick: () => setShowActivityPanel(true)
+                      },
+                      { 
+                        icon: <Settings size={16} />, 
+                        label: 'اللغة', 
+                        value: 'العربية',
+                        onClick: () => addNotification('اللغة الحالية هي العربية', 'success')
+                      },
+                      { 
+                        icon: <Info size={16} />, 
+                        label: 'عن التطبيق', 
+                        value: 'v1.0.4',
+                        onClick: () => setShowAboutApp(true)
+                      },
                     ].map((item, i) => (
-                      <button key={i} className="w-full p-3.5 flex items-center justify-between hover:bg-white/5 transition-colors border-b border-white/5 last:border-0">
+                      <button 
+                        key={i} 
+                        onClick={item.onClick}
+                        className="w-full p-3.5 flex items-center justify-between hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
+                      >
                         <div className="flex items-center gap-2.5 text-gray-300">
                           {item.icon}
                           <span className="text-sm font-medium">{item.label}</span>
@@ -4048,7 +4075,7 @@ export default function App() {
             <div className="w-full max-w-md space-y-5 text-center py-6">
               <div className="space-y-1">
                 <h2 className="text-xl font-bold text-cyan-500">شحن الرصيد</h2>
-                <p className="text-gray-400 text-xs">قم بتحويل المبلغ إلى العنوان التالي وأرفق صورة الإشعار</p>
+                <p className="text-gray-400 text-xs">قم بتحويل المبلغ إلى عنوان شام كاش التالي وأرفق صورة الإشعار</p>
               </div>
 
               {/* QR Code Section */}
@@ -4266,6 +4293,48 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      {/* About App Modal */}
+      <AnimatePresence>
+        {showAboutApp && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6"
+            onClick={() => setShowAboutApp(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-3xl p-8 text-center space-y-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-20 h-20 bg-cyan-500/10 rounded-2xl flex items-center justify-center mx-auto border border-cyan-500/20">
+                <Trophy size={40} className="text-cyan-500" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-black text-white">نصيب كاش</h2>
+                <p className="text-gray-500 text-sm font-bold uppercase tracking-widest">الإصدار v1.0.4</p>
+              </div>
+              <div className="space-y-4 text-gray-400 text-sm leading-relaxed">
+                <p>تطبيق نصيب كاش هو منصة ترفيهية تتيح للمستخدمين شراء الكروت والمشاركة في سحوبات أسبوعية وجوائز قيمة.</p>
+                <div className="pt-4 border-t border-white/5 space-y-2">
+                  <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">المطور</p>
+                  <p className="text-cyan-500 font-black">Naseeb Dev Team</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAboutApp(false)}
+                className="w-full py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-white font-bold transition-all border border-white/5"
+              >
+                إغلاق
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Developer Guide Modal */}
       <AnimatePresence>
