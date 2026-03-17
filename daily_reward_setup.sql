@@ -14,13 +14,12 @@ BEGIN
     FROM profiles
     WHERE id = user_id;
 
-    -- التحقق مما إذا كان قد مر يوم كامل (أو يوم تقويمي جديد)
-    -- هنا نستخدم التحقق من اليوم التقويمي لتبسيط الأمر للمستخدم
-    IF last_claim IS NOT NULL AND last_claim::date >= CURRENT_DATE THEN
+    -- التحقق مما إذا كان قد مر 24 ساعة كاملة
+    IF last_claim IS NOT NULL AND last_claim > NOW() - INTERVAL '24 hours' THEN
         RETURN json_build_object(
             'success', false,
-            'message', 'لقد استلمت مكافأتك اليوم بالفعل',
-            'next_available', (CURRENT_DATE + INTERVAL '1 day')::TIMESTAMPTZ
+            'message', 'يجب الانتظار 24 ساعة بين كل مكافأة',
+            'next_available', last_claim + INTERVAL '24 hours'
         );
     END IF;
 
@@ -35,5 +34,13 @@ BEGIN
         'message', 'تم استلام المكافأة بنجاح',
         'new_balance', current_balance + reward_amount
     );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- وظيفة للحصول على وقت السيرفر الحالي لتجنب تلاعب المستخدمين بالوقت
+CREATE OR REPLACE FUNCTION get_server_time()
+RETURNS TIMESTAMPTZ AS $$
+BEGIN
+  RETURN NOW();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

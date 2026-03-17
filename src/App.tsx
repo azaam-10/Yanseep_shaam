@@ -1246,9 +1246,26 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
   const [rotation, setRotation] = useState(0);
   const [prize, setPrize] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
+  const [timeOffset, setTimeOffset] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const prizes = [1, 2, 3, 4, 5, 6, 7, 8, 10, 20, 50, 100]; // 12 segments
+
+  useEffect(() => {
+    const syncTime = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_server_time');
+        if (data) {
+          const serverTime = new Date(data).getTime();
+          const localTime = Date.now();
+          setTimeOffset(serverTime - localTime);
+        }
+      } catch (e) {
+        console.error('Time sync error:', e);
+      }
+    };
+    syncTime();
+  }, []);
 
   const playTick = () => {
     try {
@@ -1305,13 +1322,11 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
   useEffect(() => {
     if (lastRewardAt) {
       const updateTimer = () => {
-        const lastDate = new Date(lastRewardAt);
-        const nextDate = new Date(lastDate);
-        nextDate.setDate(nextDate.getDate() + 1);
-        nextDate.setHours(0, 0, 0, 0);
+        const lastDate = new Date(lastRewardAt).getTime();
+        const nextDate = lastDate + (24 * 60 * 60 * 1000); // Exactly 24 hours later
         
-        const now = new Date();
-        const diff = nextDate.getTime() - now.getTime();
+        const now = Date.now() + timeOffset;
+        const diff = nextDate - now;
         
         if (diff <= 0) {
           setTimeLeft(null);
@@ -1327,7 +1342,7 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
       const interval = setInterval(updateTimer, 1000);
       return () => clearInterval(interval);
     }
-  }, [lastRewardAt]);
+  }, [lastRewardAt, timeOffset]);
 
   const spin = async () => {
     if (isSpinning || timeLeft) return;
@@ -1426,7 +1441,7 @@ function DailyRewardWheel({ user, lastRewardAt, onRewardClaimed, onClose, addNot
         
         <button 
           onClick={onClose}
-          className="absolute top-8 right-8 text-gray-500 hover:text-white transition-colors z-10 p-2 hover:bg-white/5 rounded-full"
+          className="absolute top-8 right-8 text-gray-500 hover:text-white transition-colors z-[60] p-2 hover:bg-white/5 rounded-full"
         >
           <X size={20} />
         </button>
@@ -2051,7 +2066,7 @@ export default function App() {
   const ADMIN_EMAILS = ['azaamazeez8876@gmail.com', 'rwanatiya3@gmail.com', 'azaamazeez1@gmail.com'];
   const isAdmin = supabaseUser?.email && ADMIN_EMAILS.includes(supabaseUser.email);
 
-  const canClaimReward = !lastRewardAt || new Date(lastRewardAt).toDateString() !== new Date().toDateString();
+  const canClaimReward = !lastRewardAt || (Date.now() - new Date(lastRewardAt).getTime() >= 24 * 60 * 60 * 1000);
 
   const handleRewardClaimed = (amount: number) => {
     setUser(prev => ({ ...prev, balance: prev.balance + amount }));
