@@ -1819,6 +1819,7 @@ function PurchaseModal({
   isOpen, 
   onClose, 
   onConfirm, 
+  onDeposit,
   ticketNumber, 
   balance, 
   price 
@@ -1826,6 +1827,7 @@ function PurchaseModal({
   isOpen: boolean, 
   onClose: () => void, 
   onConfirm: () => void, 
+  onDeposit: () => void,
   ticketNumber: string, 
   balance: number, 
   price: number 
@@ -1847,30 +1849,50 @@ function PurchaseModal({
           <p className="text-sm text-gray-400">أنت على وشك شراء الكرت رقم <span className="text-cyan-500 font-mono font-bold">{ticketNumber}</span></p>
         </div>
 
-        <div className="space-y-3">
-          <button 
-            onClick={() => onConfirm()}
-            disabled={balance < price}
-            className={`w-full p-4 rounded-2xl border flex items-center justify-between transition-all ${
-              balance >= price 
-                ? 'bg-white/5 border-white/10 hover:border-cyan-500/50 hover:bg-white/10' 
-                : 'bg-black/20 border-white/5 opacity-50 cursor-not-allowed'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center">
-                <Wallet className="text-blue-500 w-5 h-5" />
-              </div>
-              <div className="text-right">
-                <p className="text-xs font-bold text-white">شراء بالرصيد</p>
-                <p className="text-[10px] text-gray-500">رصيدك: {balance} ل.س</p>
-              </div>
+        <div className="space-y-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-400">سعر الكرت</span>
+              <span className="text-white font-bold">{price} ل.س</span>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-black text-white">{price}</p>
-              <p className="text-[10px] text-cyan-500 font-bold">ل.س</p>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-400">رصيدك الحالي</span>
+              <span className={`font-bold ${balance >= price ? 'text-green-500' : 'text-red-500'}`}>
+                {balance} ل.س
+              </span>
             </div>
-          </button>
+            <div className="h-px bg-white/10 w-full" />
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-400">الرصيد بعد الشراء</span>
+              <span className="text-cyan-500 font-bold">
+                {Math.max(0, balance - price)} ل.س
+              </span>
+            </div>
+          </div>
+
+          {balance >= price ? (
+            <button 
+              onClick={() => onConfirm()}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-black font-black text-lg shadow-xl shadow-cyan-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all border-2 border-white/20 flex items-center justify-center gap-2"
+            >
+              <ShoppingCart size={20} />
+              شراء الآن
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
+                <p className="text-red-500 text-sm font-bold mb-1">رصيدك غير كافٍ</p>
+                <p className="text-xs text-gray-400">تحتاج إلى {price - balance} ل.س إضافية لشراء هذا الكرت</p>
+              </div>
+              <button 
+                onClick={onDeposit}
+                className="w-full py-4 rounded-2xl bg-white text-black font-black text-lg shadow-xl hover:bg-gray-100 active:scale-[0.98] transition-all border-2 border-cyan-500 flex items-center justify-center gap-2"
+              >
+                <Plus size={20} />
+                إيداع الآن
+              </button>
+            </div>
+          )}
         </div>
 
         <button 
@@ -4594,6 +4616,10 @@ export default function App() {
         ticketNumber={selectedTicketForPurchase?.number || ''}
         balance={user.balance}
         price={TICKET_PRICE}
+        onDeposit={() => {
+          setShowPurchaseModal(false);
+          setShowRecharge(true);
+        }}
         onConfirm={async () => {
           if (selectedTicketForPurchase) {
             const success = await buyTicket(selectedTicketForPurchase.number);
