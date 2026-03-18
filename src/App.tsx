@@ -2087,8 +2087,9 @@ export default function App() {
 
   const canClaimReward = !lastRewardAt || (Date.now() - new Date(lastRewardAt).getTime() >= 24 * 60 * 60 * 1000);
 
-  const handleRewardClaimed = (amount: number) => {
-    setUser(prev => ({ ...prev, balance: prev.balance + amount }));
+  const handleRewardClaimed = async (amount: number) => {
+    // Sync with server is the most reliable way
+    await fetchProfileData();
     setLastRewardAt(new Date().toISOString());
   };
 
@@ -3772,6 +3773,25 @@ export default function App() {
                         label: 'جولة الشرح', 
                         value: 'ابدأ الآن',
                         onClick: () => setShowTour(true)
+                      },
+                      { 
+                        icon: <RefreshCw size={16} />, 
+                        label: 'إصلاح التطبيق', 
+                        value: 'PWA Fix',
+                        onClick: () => {
+                          if ('serviceWorker' in navigator) {
+                            navigator.serviceWorker.getRegistrations().then(registrations => {
+                              for (let registration of registrations) {
+                                registration.unregister();
+                              }
+                              caches.keys().then(names => {
+                                for (let name of names) caches.delete(name);
+                              });
+                              addNotification('تم مسح التخزين المؤقت، يرجى إعادة تحميل التطبيق', 'success');
+                              setTimeout(() => window.location.reload(), 1500);
+                            });
+                          }
+                        }
                       },
                     ].map((item, i) => (
                       <button 
