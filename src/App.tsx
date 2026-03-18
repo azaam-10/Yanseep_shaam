@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { OnboardingTour } from './components/OnboardingTour';
 import { QRCodeCanvas } from 'qrcode.react';
 import { 
   Wallet, 
@@ -39,7 +40,8 @@ import {
   RotateCcw,
   Unlock,
   Gift,
-  Star
+  Star,
+  HelpCircle
 } from 'lucide-react';
 import { TICKET_PRICE, PRIZE_TIERS } from './constants';
 import { Ticket, User } from './types';
@@ -1979,7 +1981,7 @@ function WithdrawModal({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form id="tour-withdraw-modal-content" onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5 text-right">
             <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1">عنوان شام كاش</label>
             <input 
@@ -2076,6 +2078,7 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showDailyWheel, setShowDailyWheel] = useState(false);
   const [lastRewardAt, setLastRewardAt] = useState<string | null>(null);
+  const [showTour, setShowTour] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
@@ -2100,6 +2103,16 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSupabaseUser(session?.user ?? null);
       setAuthLoading(false);
+      
+      // Check if user should see the tour
+      if (session?.user) {
+        const hasSeenTour = localStorage.getItem(`tour_completed_${session.user.id}`);
+        console.log('User session found (getSession). hasSeenTour:', hasSeenTour);
+        if (!hasSeenTour) {
+          console.log('Triggering tour automatically (getSession)');
+          setShowTour(true);
+        }
+      }
       // If there's a referral code and no session, show the registration modal
       if (!session && ref) {
         setAuthInitialMode('signup');
@@ -2109,6 +2122,14 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSupabaseUser(session?.user ?? null);
+      if (session?.user) {
+        const hasSeenTour = localStorage.getItem(`tour_completed_${session.user.id}`);
+        console.log('User session found (onAuthStateChange). hasSeenTour:', hasSeenTour);
+        if (!hasSeenTour) {
+          console.log('Triggering tour automatically (onAuthStateChange)');
+          setShowTour(true);
+        }
+      }
     });
 
     const installHandler = (e: any) => {
@@ -2868,6 +2889,13 @@ export default function App() {
               </span>
             )}
           </button>
+          <button 
+            onClick={() => setShowTour(true)} 
+            className="p-2 hover:bg-cyan-500/10 rounded-xl transition-colors group"
+            title="جولة الشرح"
+          >
+            <HelpCircle className="w-4 h-4 text-gray-400 group-hover:text-cyan-500" />
+          </button>
           <button onClick={() => setShowDevGuide(!showDevGuide)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
             <Info className="w-4 h-4 text-gray-400" />
           </button>
@@ -2942,6 +2970,14 @@ export default function App() {
               >
                 <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/10 blur-3xl rounded-full -mr-12 -mt-12" />
                 
+                <button 
+                  onClick={() => setShowTour(true)}
+                  className="absolute top-3 left-3 p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-gray-500 transition-all z-10"
+                  title="جولة الشرح"
+                >
+                  <HelpCircle size={14} />
+                </button>
+
                 <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-3">
                     <div>
@@ -2976,6 +3012,7 @@ export default function App() {
                   </div>
                   <div className="flex gap-2">
                     <button 
+                      id="tour-deposit"
                       onClick={() => {
                         if (!supabaseUser) {
                           addNotification('يرجى تسجيل الدخول لشحن الرصيد', 'error');
@@ -3004,6 +3041,7 @@ export default function App() {
                       <span className="text-[8px] font-black uppercase tracking-tighter">صرف</span>
                     </button>
                     <button 
+                      id="tour-withdraw"
                       onClick={() => {
                         if (!supabaseUser) {
                           addNotification('يرجى تسجيل الدخول لسحب الرصيد', 'error');
@@ -3056,6 +3094,7 @@ export default function App() {
 
               {/* Countdown Timer - Urgency */}
               <motion.section 
+                id="tour-draw-room"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
@@ -3095,7 +3134,7 @@ export default function App() {
             </div>
 
             {/* Level Badge Section */}
-            <div className="space-y-2">
+            <div id="tour-level-info" className="space-y-2">
               <div className="flex items-center justify-between bg-white/5 border border-white/10 p-3 rounded-2xl relative overflow-hidden group">
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
                 <div className="flex items-center gap-3 relative z-10">
@@ -3728,6 +3767,12 @@ export default function App() {
                         value: 'PWA',
                         onClick: handleInstallClick
                       },
+                      { 
+                        icon: <Sparkles size={16} />, 
+                        label: 'جولة الشرح', 
+                        value: 'ابدأ الآن',
+                        onClick: () => setShowTour(true)
+                      },
                     ].map((item, i) => (
                       <button 
                         key={i} 
@@ -4167,7 +4212,7 @@ export default function App() {
               </div>
 
               {/* Address Copy Section */}
-              <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center justify-between gap-3">
+              <div id="tour-copy-address" className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center justify-between gap-3">
                 <div className="text-right overflow-hidden">
                   <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">عنوان التحويل</p>
                   <p className="text-[11px] font-mono text-white truncate">{RECHARGE_ADDRESS}</p>
@@ -4182,7 +4227,7 @@ export default function App() {
 
               {/* Upload Receipt Section */}
               <form onSubmit={handleRechargeSubmit} className="space-y-3">
-                <div className="relative group">
+                <div id="tour-upload-receipt" className="relative group">
                   <input 
                     type="file" 
                     accept="image/*"
@@ -4348,6 +4393,7 @@ export default function App() {
           { id: 'profile', icon: <UserIcon />, label: 'حسابي' },
         ].map((tab) => (
           <button 
+            id={`nav-${tab.id}`}
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={`flex flex-col items-center gap-1 transition-all relative ${activeTab === tab.id ? 'text-cyan-500' : 'text-gray-500 hover:text-gray-300'}`}
@@ -4424,6 +4470,7 @@ export default function App() {
       {/* Floating Daily Reward Button */}
       {supabaseUser && (
         <motion.button
+          id="tour-daily-reward"
           initial={{ x: 100 }}
           animate={{ x: 0 }}
           whileHover={{ x: -10 }}
@@ -4537,6 +4584,22 @@ export default function App() {
           }
         }}
       />
+
+      {showTour && (
+        <OnboardingTour 
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          setShowRecharge={setShowRecharge}
+          setShowWithdraw={setShowWithdraw}
+          setShowRedeem={setShowRedeem}
+          onComplete={() => {
+            setShowTour(false);
+            if (supabaseUser) {
+              localStorage.setItem(`tour_completed_${supabaseUser.id}`, 'true');
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
