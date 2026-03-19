@@ -1,4 +1,4 @@
-const CACHE_NAME = 'naseeb-cash-v2';
+const CACHE_NAME = 'naseeb-cash-v8';
 const urlsToCache = [
   '/',
   '/index.html',

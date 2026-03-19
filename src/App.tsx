@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { OnboardingTour } from './components/OnboardingTour';
 import { QRCodeCanvas } from 'qrcode.react';
+import { SupportChat } from './components/SupportChat';
+import { AdminSupport } from './components/AdminSupport';
 import { 
   Wallet, 
   Ticket as TicketIcon, 
@@ -41,9 +43,11 @@ import {
   Unlock,
   Gift,
   Star,
-  HelpCircle
+  HelpCircle,
+  MessageCircle
 } from 'lucide-react';
 import { TICKET_PRICE, PRIZE_TIERS } from './constants';
+import AdminPanel from './components/AdminPanel';
 import { Ticket, User } from './types';
 import { supabase } from './supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
@@ -278,967 +282,14 @@ function AuthForm({ onSuccess, addNotification, initialMode = 'login' }: { onSuc
         <button 
           type="button"
           onClick={() => setIsLogin(!isLogin)}
-          className="w-full text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] hover:text-cyan-500 transition-colors py-2"
+          className={isLogin 
+            ? "w-full bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl text-sm shadow-xl shadow-red-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            : "w-full text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] hover:text-cyan-500 transition-colors py-2"
+          }
         >
-          {isLogin ? 'ليس لديك حساب؟ انضم إلينا الآن' : 'لديك حساب بالفعل؟ سجل دخولك'}
+          {isLogin ? 'انشاء حساب' : 'لديك حساب بالفعل؟ سجل دخولك'}
         </button>
       </form>
-    </div>
-  );
-}
-
-function AdminPanel({ 
-  onClose, 
-  requests, 
-  withdrawals,
-  onRefresh, 
-  addNotification,
-  setRequests,
-  setWithdrawals
-}: { 
-  onClose: () => void, 
-  requests: any[], 
-  withdrawals: any[],
-  onRefresh: () => void,
-  addNotification: (t: string, type?: 'success' | 'error') => void,
-  setRequests: React.Dispatch<React.SetStateAction<any[]>>,
-  setWithdrawals: React.Dispatch<React.SetStateAction<any[]>>
-}) {
-  const [activeTab, setActiveTab] = useState<'requests' | 'withdrawals' | 'tickets' | 'users' | 'settings'>('requests');
-  const [processingId, setProcessingId] = useState<string | null>(null);
-  const [rechargeAmount, setRechargeAmount] = useState<string>('');
-  const [isInitializingStorage, setIsInitializingStorage] = useState(false);
-  
-  const initializeStorage = async () => {
-    setIsInitializingStorage(true);
-    try {
-      // Attempt to create the bucket
-      const { error } = await supabase.storage.createBucket('receipts', {
-        public: true,
-        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg'],
-        fileSizeLimit: 5242880 // 5MB
-      });
-      
-      if (error) {
-        if (error.message.includes('already exists')) {
-          addNotification('مخزن الصور موجود بالفعل');
-        } else {
-          throw error;
-        }
-      } else {
-        addNotification('تم إنشاء مخزن الصور "receipts" بنجاح');
-      }
-    } catch (err: any) {
-      console.error('Storage Init Error:', err);
-      addNotification('فشل الإنشاء التلقائي. يرجى إنشاء مخزن باسم receipts يدوياً في Supabase', 'error');
-    } finally {
-      setIsInitializingStorage(false);
-    }
-  };
-  
-  // Ticket management state
-  const [ticketStart, setTicketStart] = useState('');
-  const [ticketEnd, setTicketEnd] = useState('');
-  const [ticketLevel, setTicketLevel] = useState('0');
-  const [isAddingTickets, setIsAddingTickets] = useState(false);
-  const [isDeletingTickets, setIsDeletingTickets] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  // User management state
-  const [userSearchEmail, setUserSearchEmail] = useState('');
-  const [foundUser, setFoundUser] = useState<any>(null);
-  const [adjustAmount, setAdjustAmount] = useState('');
-  const [isSearchingUser, setIsSearchingUser] = useState(false);
-
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [userTickets, setUserTickets] = useState<any[]>([]);
-  const [isLoadingUserTickets, setIsLoadingUserTickets] = useState(false);
-
-  const fetchUserTickets = async (userId: string) => {
-    setIsLoadingUserTickets(true);
-    try {
-      const { data, error } = await supabase
-        .from('shop_tickets')
-        .select('*')
-        .eq('owner_id', userId)
-        .eq('is_sold', true);
-      
-      if (error) throw error;
-      console.log('Fetched tickets for user:', data);
-      setUserTickets(data || []);
-    } catch (err) {
-      console.error('Fetch User Tickets Error:', err);
-    } finally {
-      setIsLoadingUserTickets(false);
-    }
-  };
-
-  useEffect(() => {
-    if (foundUser) {
-      fetchUserTickets(foundUser.id);
-    } else {
-      setUserTickets([]);
-    }
-  }, [foundUser]);
-
-  useEffect(() => {
-    if (activeTab === 'users' && recentUsers.length === 0) {
-      fetchRecentUsers();
-    }
-  }, [activeTab]);
-
-  const fetchRecentUsers = async () => {
-    setLoadingUsers(true);
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .limit(20);
-      
-      if (error) throw error;
-      setRecentUsers(data || []);
-    } catch (err: any) {
-      console.error('Fetch Users Error:', err);
-      addNotification('فشل تحميل قائمة المستخدمين: ' + (err.message || ''), 'error');
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  const handleApprove = async (requestId: string, userId: string) => {
-    if (!rechargeAmount || isNaN(Number(rechargeAmount))) {
-      addNotification('يرجى إدخال مبلغ صحيح', 'error');
-      return;
-    }
-    setProcessingId(requestId);
-    try {
-      const amount = Number(rechargeAmount);
-      
-      // Use a single RPC call for atomicity if available, or sequential updates
-      // Here we stick to sequential for simplicity unless we are sure RPC exists, 
-      // but I will provide the RPC SQL to the user.
-      
-      // 1. Update user balance (using increment logic if possible, but here we fetch latest)
-      const { data: profileData, error: fetchError } = await supabase
-        .from('profiles')
-        .select('balance')
-        .eq('id', userId)
-        .single();
-      
-      if (fetchError) throw fetchError;
-      const newBalance = (profileData?.balance || 0) + amount;
-
-      const { error: balanceError } = await supabase
-        .from('profiles')
-        .update({ balance: newBalance })
-        .eq('id', userId);
-      
-      if (balanceError) throw balanceError;
-
-      // 2. Update request status
-      const { error: requestError } = await supabase
-        .from('recharge_requests')
-        .update({ status: 'approved', processed_amount: amount })
-        .eq('id', requestId);
-      
-      if (requestError) throw requestError;
-
-      // 3. Add notification for user
-      await supabase.from('notifications').insert({
-        user_id: userId,
-        title: 'تم قبول طلب الشحن',
-        message: `تمت الموافقة على طلب الشحن الخاص بك بمبلغ ${amount} ل.س. تم تحديث رصيدك الآن.`,
-        type: 'success'
-      });
-
-      addNotification(`تم شحن ${amount} ل.س بنجاح`);
-      setRechargeAmount('');
-      
-      // Remove from local state immediately
-      setRequests(prev => prev.filter(r => r.id !== requestId));
-    } catch (err: any) {
-      console.error('Approve Error:', err);
-      addNotification('حدث خطأ أثناء المعالجة: ' + (err.message || ''), 'error');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleReject = async (requestId: string) => {
-    setProcessingId(requestId);
-    try {
-      const { error } = await supabase
-        .from('recharge_requests')
-        .update({ status: 'rejected' })
-        .eq('id', requestId);
-      
-      if (error) throw error;
-
-      // Add notification for user
-      const request = requests.find(r => r.id === requestId);
-      if (request) {
-        await supabase.from('notifications').insert({
-          user_id: request.user_id,
-          title: 'تم رفض طلب الشحن',
-          message: 'نعتذر، لقد تم رفض طلب الشحن الخاص بك. يرجى التأكد من صحة الإيصال والمحاولة مرة أخرى.',
-          type: 'error'
-        });
-      }
-
-      addNotification('تم رفض الطلب بنجاح');
-      setRequests(prev => prev.filter(r => r.id !== requestId));
-    } catch (err: any) {
-      console.error('Reject Error:', err);
-      addNotification('حدث خطأ أثناء الرفض', 'error');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleApproveWithdrawal = async (requestId: string, userId: string, amount: number) => {
-    setProcessingId(requestId);
-    try {
-      const { data: profileData, error: fetchError } = await supabase
-        .from('profiles')
-        .select('balance')
-        .eq('id', userId)
-        .single();
-      
-      if (fetchError) throw fetchError;
-      
-      if ((profileData?.balance || 0) < amount) {
-        addNotification('رصيد المستخدم غير كافٍ لإتمام عملية السحب', 'error');
-        return;
-      }
-
-      const newBalance = (profileData?.balance || 0) - amount;
-
-      const { error: balanceError } = await supabase
-        .from('profiles')
-        .update({ balance: newBalance })
-        .eq('id', userId);
-      
-      if (balanceError) throw balanceError;
-
-      const { error: requestError } = await supabase
-        .from('withdrawal_requests')
-        .update({ status: 'approved' })
-        .eq('id', requestId);
-      
-      if (requestError) throw requestError;
-
-      // 3. Add notification for user
-      await supabase.from('notifications').insert({
-        user_id: userId,
-        title: 'تم قبول طلب السحب',
-        message: `تمت الموافقة على طلب السحب الخاص بك بمبلغ ${amount} ل.س. سيتم تحويل المبلغ إلى عنوان شام كاش الخاص بك قريباً.`,
-        type: 'success'
-      });
-
-      addNotification(`تمت الموافقة على سحب ${amount} ل.س بنجاح`);
-      setWithdrawals(prev => prev.filter(w => w.id !== requestId));
-    } catch (err: any) {
-      console.error('Withdraw Approval Error:', err);
-      addNotification('حدث خطأ أثناء المعالجة: ' + (err.message || ''), 'error');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleRejectWithdrawal = async (requestId: string) => {
-    setProcessingId(requestId);
-    try {
-      const { error } = await supabase
-        .from('withdrawal_requests')
-        .update({ status: 'rejected' })
-        .eq('id', requestId);
-      
-      if (error) throw error;
-
-      // Add notification for user
-      const withdrawal = withdrawals.find(w => w.id === requestId);
-      if (withdrawal) {
-        await supabase.from('notifications').insert({
-          user_id: withdrawal.user_id,
-          title: 'تم رفض طلب السحب',
-          message: 'نعتذر، لقد تم رفض طلب السحب الخاص بك. يرجى التواصل مع الدعم الفني لمزيد من التفاصيل.',
-          type: 'error'
-        });
-      }
-
-      addNotification('تم رفض طلب السحب');
-      
-      // Remove from local state only after successful DB update
-      setWithdrawals(prev => prev.filter(w => w.id !== requestId));
-    } catch (err: any) {
-      addNotification('خطأ في الرفض: ' + err.message, 'error');
-    } finally {
-      setProcessingId(null);
-    }
-  };
-
-  const handleAddTickets = async () => {
-    const start = parseInt(ticketStart);
-    const end = parseInt(ticketEnd);
-    const level = parseInt(ticketLevel);
-    if (isNaN(start) || isNaN(end) || start > end) {
-      addNotification('يرجى إدخال نطاق أرقام صحيح', 'error');
-      return;
-    }
-    
-    addNotification('جاري تحديث الكروت...');
-    setIsAddingTickets(true);
-    try {
-      // 1. Mark all currently sold tickets for this level as inactive (expired)
-      await supabase
-        .from('shop_tickets')
-        .update({ is_active: false })
-        .eq('level_index', level)
-        .eq('is_sold', true);
-      
-      // 2. Delete all unsold tickets for this level
-      const { error: deleteError } = await supabase
-        .from('shop_tickets')
-        .delete()
-        .eq('level_index', level)
-        .eq('is_sold', false);
-      
-      if (deleteError) throw deleteError;
-
-      // 3. Prepare new tickets
-      const tickets = [];
-      for (let i = start; i <= end; i++) {
-        const num = i.toString().padStart(6, '0');
-        tickets.push({
-          number: num,
-          level_index: level,
-          is_sold: false,
-          is_active: true
-        });
-      }
-      
-      // 4. الإضافة على دفعات
-      if (tickets.length > 0) {
-        const batchSize = 500;
-        for (let i = 0; i < tickets.length; i += batchSize) {
-          const batch = tickets.slice(i, i + batchSize);
-          const { error } = await supabase.from('shop_tickets').insert(batch);
-          if (error) {
-            console.error('Insert Error:', error);
-            throw error;
-          }
-        }
-      }
-      
-      addNotification(`تم تحديث الكروت بنجاح (تم إضافة ${tickets.length} كرت جديد)`);
-      setTicketStart('');
-      setTicketEnd('');
-    } catch (err: any) {
-      console.error('Add Tickets Error:', err);
-      addNotification('حدث خطأ أثناء تحديث الكروت', 'error');
-    } finally {
-      setIsAddingTickets(false);
-    }
-  };
-
-  const handleDeleteUnsoldTickets = async () => {
-    if (!showDeleteConfirm) {
-      setShowDeleteConfirm(true);
-      return;
-    }
-    
-    setShowDeleteConfirm(false);
-    addNotification('جاري حذف الكروت غير المباعة وأرشفة المباعة...');
-    setIsDeletingTickets(true);
-    try {
-      // 1. Mark all sold tickets as inactive
-      await supabase
-        .from('shop_tickets')
-        .update({ is_active: false })
-        .eq('is_sold', true);
-
-      // 2. Delete all unsold tickets
-      const { error } = await supabase
-        .from('shop_tickets')
-        .delete()
-        .eq('is_sold', false);
-      
-      if (error) throw error;
-      
-      addNotification('تم حذف جميع الكروت غير المباعة بنجاح');
-    } catch (err: any) {
-      console.error('Delete Tickets Error:', err);
-      addNotification('حدث خطأ أثناء حذف الكروت: ' + (err.message || 'خطأ غير معروف'), 'error');
-    } finally {
-      setIsDeletingTickets(false);
-    }
-  };
-
-  const handleSearchUser = async () => {
-    if (!userSearchEmail) return;
-    setIsSearchingUser(true);
-    setFoundUser(null);
-    try {
-      // Try searching by email first
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('email', userSearchEmail)
-        .maybeSingle();
-      
-      if (error) throw error;
-
-      if (data) {
-        setFoundUser(data);
-      } else {
-        // Fallback: search by name
-        const { data: nameData, error: nameError } = await supabase
-          .from('profiles')
-          .select('*')
-          .or(`first_name.ilike.%${userSearchEmail}%,last_name.ilike.%${userSearchEmail}%`)
-          .limit(1)
-          .maybeSingle();
-        
-        if (nameError) throw nameError;
-        
-        if (nameData) {
-          setFoundUser(nameData);
-        } else {
-          addNotification('المستخدم غير موجود', 'error');
-        }
-      }
-    } catch (err: any) {
-      console.error('Search User Error:', err);
-      addNotification('خطأ في البحث: ' + (err.message || ''), 'error');
-    } finally {
-      setIsSearchingUser(false);
-    }
-  };
-
-  const handleAdjustBalance = async (type: 'add' | 'subtract') => {
-    if (!foundUser || !adjustAmount || isNaN(Number(adjustAmount))) return;
-    const amount = Number(adjustAmount);
-    const newBalance = type === 'add' ? foundUser.balance + amount : foundUser.balance - amount;
-    
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ balance: newBalance })
-        .eq('id', foundUser.id);
-      
-      if (error) throw error;
-      setFoundUser({ ...foundUser, balance: newBalance });
-      addNotification('تم تعديل الرصيد بنجاح');
-      setAdjustAmount('');
-      fetchRecentUsers();
-    } catch (err) {
-      addNotification('حدث خطأ أثناء تعديل الرصيد', 'error');
-    }
-  };
-
-  const handleToggleFreeze = async () => {
-    if (!foundUser) return;
-    const newStatus = !foundUser.is_frozen;
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_frozen: newStatus })
-        .eq('id', foundUser.id);
-      
-      if (error) throw error;
-      setFoundUser({ ...foundUser, is_frozen: newStatus });
-      addNotification(newStatus ? 'تم تجميد الحساب' : 'تم إلغاء التجميد');
-      fetchRecentUsers();
-    } catch (err) {
-      addNotification('فشل تغيير حالة الحساب', 'error');
-    }
-  };
-
-  const handleDeleteUser = async () => {
-    if (!foundUser) return;
-    if (!window.confirm(`هل أنت متأكد من حذف المستخدم ${foundUser.first_name} نهائياً؟ سيتم حذف جميع بياناته من قاعدة البيانات ونظام المصادقة.`)) return;
-    
-    try {
-      // محاولة حذف المستخدم عبر RPC (الذي يحذف من auth.users و profiles)
-      const { error } = await supabase.rpc('delete_user_completely', { user_id: foundUser.id });
-      
-      if (error) {
-        console.error('RPC Delete Error:', error);
-        // محاولة الحذف اليدوي من الجداول العامة كبديل
-        const { error: profileError } = await supabase.from('profiles').delete().eq('id', foundUser.id);
-        if (profileError) throw profileError;
-      }
-      
-      addNotification('تم حذف المستخدم وجميع بياناته بنجاح');
-      setFoundUser(null);
-      setUserSearchEmail('');
-      fetchRecentUsers();
-    } catch (err: any) {
-      console.error('Delete User Error:', err);
-      addNotification('فشل حذف المستخدم: ' + (err.message || ''), 'error');
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-full" dir="rtl">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center text-black">
-            <ShieldCheck size={24} />
-          </div>
-          <div>
-            <h2 className="text-xl font-black text-white">لوحة التحكم</h2>
-            <p className="text-[10px] text-cyan-500 font-bold uppercase tracking-widest">Admin Control Center</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => {
-              onRefresh();
-              if (activeTab === 'users') fetchRecentUsers();
-              addNotification('تم تحديث البيانات');
-            }} 
-            className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-cyan-500"
-            title="تحديث البيانات"
-          >
-            <RotateCcw size={20} />
-          </button>
-          <button onClick={onClose} className="p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
-            <X size={20} />
-          </button>
-        </div>
-      </div>
-
-      <div className="flex border-b border-white/10 mb-6">
-        <button 
-          onClick={() => setActiveTab('requests')}
-          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'requests' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
-        >
-          الشحن ({requests.length})
-        </button>
-        <button 
-          onClick={() => setActiveTab('withdrawals')}
-          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'withdrawals' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
-        >
-          السحب ({withdrawals.length})
-        </button>
-        <button 
-          onClick={() => setActiveTab('tickets')}
-          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'tickets' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
-        >
-          الكروت
-        </button>
-        <button 
-          onClick={() => setActiveTab('users')}
-          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'users' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
-        >
-          المستخدمين
-        </button>
-        <button 
-          onClick={() => setActiveTab('settings')}
-          className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'settings' ? 'text-cyan-500 border-b-2 border-cyan-500' : 'text-gray-500'}`}
-        >
-          الإعدادات
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
-        {activeTab === 'requests' && (
-          <div className="space-y-4">
-            {requests.length === 0 ? (
-              <div className="py-20 text-center text-gray-500 text-xs font-bold">لا توجد طلبات معلقة حالياً</div>
-            ) : (
-              requests.map((req) => (
-                <div key={req.id} className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-white">{req.profiles?.first_name} {req.profiles?.last_name || 'مستخدم'}</p>
-                      <p className="text-[10px] text-gray-500">{req.user_email}</p>
-                      <p className="text-[10px] text-cyan-500 font-bold mt-1">الرصيد: {req.profiles?.balance || 0} ل.س</p>
-                    </div>
-                    <div className="text-[9px] text-gray-500 font-mono">
-                      {new Date(req.created_at).toLocaleTimeString('ar-SY')}
-                    </div>
-                  </div>
-
-                  {req.receipt_url && (
-                    <div className="relative group rounded-xl overflow-hidden border border-white/10 bg-black/40">
-                      <img src={req.receipt_url} alt="Receipt" className="w-full h-40 object-contain" />
-                      <a 
-                        href={req.receipt_url} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all"
-                      >
-                        <Eye className="text-white" size={24} />
-                      </a>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <input 
-                      type="number" 
-                      placeholder="المبلغ المراد شحنه"
-                      className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-cyan-500 transition-all"
-                      onChange={(e) => setRechargeAmount(e.target.value)}
-                    />
-                    <button 
-                      onClick={() => handleApprove(req.id, req.user_id)}
-                      disabled={processingId === req.id}
-                      className="bg-cyan-500 text-black font-black px-4 py-2 rounded-xl text-[10px] hover:bg-cyan-400 transition-all disabled:opacity-50"
-                    >
-                      {processingId === req.id ? <Loader2 className="animate-spin w-4 h-4" /> : 'موافقة'}
-                    </button>
-                    <button 
-                      onClick={() => handleReject(req.id)}
-                      disabled={processingId === req.id}
-                      className="bg-red-500/10 text-red-500 border border-red-500/20 font-black px-4 py-2 rounded-xl text-[10px] hover:bg-red-500/20 transition-all disabled:opacity-50"
-                    >
-                      رفض
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === 'withdrawals' && (
-          <div className="space-y-4">
-            {withdrawals.length === 0 ? (
-              <div className="py-20 text-center text-gray-500 text-xs font-bold">لا توجد طلبات سحب معلقة حالياً</div>
-            ) : (
-              withdrawals.map((req) => (
-                <div key={req.id} className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-white">{req.profiles?.first_name} {req.profiles?.last_name || 'مستخدم'}</p>
-                      <p className="text-[10px] text-gray-500">{req.profiles?.email}</p>
-                      <p className="text-[10px] text-gray-500">{new Date(req.created_at).toLocaleString('ar-SA')}</p>
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-black text-red-500">{req.amount} ل.س</p>
-                      <p className="text-[9px] text-gray-500">الرصيد: {req.profiles?.balance} ل.س</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-black/40 border border-white/10 rounded-xl p-3 space-y-1">
-                    <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest text-right">عنوان شام كاش</p>
-                    <p className="text-xs font-mono text-white break-all text-right">{req.sham_cash_address}</p>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleApproveWithdrawal(req.id, req.user_id, req.amount)}
-                      disabled={processingId === req.id}
-                      className="flex-1 bg-cyan-500 text-black font-black py-2.5 rounded-xl text-xs hover:bg-cyan-400 transition-all disabled:opacity-50"
-                    >
-                      {processingId === req.id ? <Loader2 className="animate-spin w-4 h-4 mx-auto" /> : 'موافقة على السحب'}
-                    </button>
-                    <button 
-                      onClick={() => handleRejectWithdrawal(req.id)}
-                      disabled={processingId === req.id}
-                      className="bg-red-500/10 text-red-500 border border-red-500/20 font-black px-4 py-2.5 rounded-xl text-xs hover:bg-red-500/20 transition-all disabled:opacity-50"
-                    >
-                      رفض
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === 'tickets' && (
-          <div className="space-y-6">
-            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-4">
-              <h3 className="text-xs font-black text-white uppercase tracking-widest">توليد كروت جديدة</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">من رقم</label>
-                  <input 
-                    type="number" 
-                    value={ticketStart}
-                    onChange={(e) => setTicketStart(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 text-xs outline-none focus:border-cyan-500 transition-all"
-                    placeholder="1"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">إلى رقم</label>
-                  <input 
-                    type="number" 
-                    value={ticketEnd}
-                    onChange={(e) => setTicketEnd(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 text-xs outline-none focus:border-cyan-500 transition-all"
-                    placeholder="100"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">المستوى</label>
-                <select 
-                  value={ticketLevel}
-                  onChange={(e) => setTicketLevel(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 px-4 text-xs outline-none focus:border-cyan-500 transition-all appearance-none"
-                >
-                  <option value="0">برونز 1 (1000 كرت)</option>
-                  <option value="1">برونز 2 (2000 كرت)</option>
-                  <option value="2">برونز 3 (3000 كرت)</option>
-                  <option value="3">سيلفر 1 (5000 كرت)</option>
-                  <option value="4">سيلفر 2 (10000 كرت)</option>
-                  <option value="5">جولد 1 (20000 كرت)</option>
-                </select>
-              </div>
-              <button 
-                onClick={handleAddTickets}
-                disabled={isAddingTickets}
-                className="w-full bg-cyan-500 text-black font-black py-3.5 rounded-xl text-xs shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all flex items-center justify-center gap-2"
-              >
-                {isAddingTickets ? <Loader2 className="animate-spin w-5 h-5" /> : (
-                  <>
-                    <Plus size={16} />
-                    <span>إضافة الكروت إلى المتجر</span>
-                  </>
-                )}
-              </button>
-
-              <button 
-                onClick={handleDeleteUnsoldTickets}
-                disabled={isDeletingTickets}
-                className={`w-full font-black py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 ${
-                  showDeleteConfirm 
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
-                    : 'bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20'
-                }`}
-              >
-                {isDeletingTickets ? <Loader2 className="animate-spin w-5 h-5" /> : (
-                  <>
-                    <Trash2 size={16} />
-                    <span>{showDeleteConfirm ? 'تأكيد الحذف النهائي؟' : 'حذف جميع الكروت غير المباعة'}</span>
-                  </>
-                )}
-              </button>
-              {showDeleteConfirm && (
-                <button 
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="w-full text-[10px] text-gray-500 hover:text-white transition-colors"
-                >
-                  إلغاء
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'users' && (
-          <div className="space-y-6">
-            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-4">
-              <h3 className="text-xs font-black text-white uppercase tracking-widest">البحث عن مستخدم</h3>
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  value={userSearchEmail}
-                  onChange={(e) => setUserSearchEmail(e.target.value)}
-                  className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-cyan-500 transition-all"
-                  placeholder="البريد الإلكتروني أو الاسم"
-                />
-                <button 
-                  onClick={handleSearchUser}
-                  disabled={isSearchingUser}
-                  className="bg-white/5 p-2.5 rounded-xl hover:bg-white/10 transition-all border border-white/5"
-                >
-                  {isSearchingUser ? <Loader2 className="animate-spin w-5 h-5" /> : <Search size={18} />}
-                </button>
-              </div>
-
-              {foundUser && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="pt-4 border-t border-white/10 space-y-6"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-base font-black text-white">
-                          {foundUser.first_name || foundUser.last_name 
-                            ? `${foundUser.first_name || ''} ${foundUser.last_name || ''}`.trim() 
-                            : 'مستخدم بدون اسم'}
-                        </p>
-                        {foundUser.is_frozen && (
-                          <span className="bg-red-500/20 text-red-500 text-[8px] px-2 py-0.5 rounded-full font-black uppercase">مجمد</span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-gray-500 mb-1">{foundUser.email}</p>
-                      <p className="text-[10px] text-cyan-500 font-bold">الرصيد: {foundUser.balance} ل.س</p>
-                    </div>
-                    <button 
-                      onClick={() => setFoundUser(null)}
-                      className="p-1.5 bg-white/5 rounded-lg hover:bg-white/10 transition-all text-gray-400"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
-                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">العمر</p>
-                      <p className="text-xs font-bold text-white">{foundUser.age || 'غير محدد'}</p>
-                    </div>
-                    <div className="bg-white/[0.02] border border-white/5 rounded-xl p-3">
-                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">تاريخ الانضمام</p>
-                      <p className="text-xs font-bold text-white">
-                        {foundUser.created_at ? new Date(foundUser.created_at).toLocaleDateString('ar-SY') : 'غير معروف'}
-                      </p>
-                    </div>
-                    <div className="col-span-2 bg-white/[0.02] border border-white/5 rounded-xl p-3">
-                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-1">عنوان شام كاش</p>
-                      <p className="text-xs font-bold text-cyan-500 break-all">{foundUser.sham_cash_address || 'لم يتم إدخاله'}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">الكروت المشتراة ({userTickets.length})</h4>
-                      <button 
-                        onClick={() => fetchUserTickets(foundUser.id)}
-                        className="p-1 bg-white/5 rounded hover:bg-white/10 transition-all text-cyan-500"
-                        title="تحديث قائمة الكروت"
-                      >
-                        <RotateCcw size={12} />
-                      </button>
-                    </div>
-                    {isLoadingUserTickets ? (
-                      <div className="flex justify-center py-4"><Loader2 className="animate-spin w-4 h-4 text-cyan-500" /></div>
-                    ) : userTickets.length === 0 ? (
-                      <p className="text-[10px] text-gray-600 text-center py-2 italic">لم يقم بشراء أي كروت بعد</p>
-                    ) : (
-                      <div className="grid grid-cols-4 gap-2">
-                        {userTickets.map(t => (
-                          <div key={t.id} className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg py-1 text-center">
-                            <p className="text-[9px] font-black text-cyan-500">{t.number}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-xl p-3">
-                    <p className="text-[8px] text-yellow-500 font-black uppercase tracking-widest mb-1">ملاحظة أمنية</p>
-                    <p className="text-[9px] text-gray-400 leading-relaxed">
-                      كلمات المرور مشفرة ولا يمكن عرضها لأسباب أمنية. إذا نسي المستخدم كلمة المرور، يمكنه استخدام خيار "نسيت كلمة المرور" عند تسجيل الدخول.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mr-1">تعديل الرصيد</label>
-                    <div className="flex gap-2">
-                      <input 
-                        type="number" 
-                        value={adjustAmount}
-                        onChange={(e) => setAdjustAmount(e.target.value)}
-                        className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 text-xs outline-none focus:border-cyan-500 transition-all"
-                        placeholder="المبلغ"
-                      />
-                      <button 
-                        onClick={() => handleAdjustBalance('add')}
-                        className="bg-green-500/10 text-green-500 border border-green-500/20 font-black px-4 py-2 rounded-xl text-[10px] hover:bg-green-500/20 transition-all"
-                      >
-                        إضافة
-                      </button>
-                      <button 
-                        onClick={() => handleAdjustBalance('subtract')}
-                        className="bg-red-500/10 text-red-500 border border-red-500/20 font-black px-4 py-2 rounded-xl text-[10px] hover:bg-red-500/20 transition-all"
-                      >
-                        خصم
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    <button 
-                      onClick={handleToggleFreeze}
-                      className={`flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black transition-all ${foundUser.is_frozen ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-orange-500/10 text-orange-500 border border-orange-500/20'}`}
-                    >
-                      {foundUser.is_frozen ? <Unlock size={14} /> : <Lock size={14} />}
-                      <span>{foundUser.is_frozen ? 'إلغاء التجميد' : 'تجميد الحساب'}</span>
-                    </button>
-                    <button 
-                      onClick={handleDeleteUser}
-                      className="flex items-center justify-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 py-3 rounded-xl text-[10px] font-black hover:bg-red-500/20 transition-all"
-                    >
-                      <Trash2 size={14} />
-                      <span>حذف الحساب</span>
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mr-1">آخر المستخدمين المسجلين</h3>
-              {loadingUsers ? (
-                <div className="flex justify-center py-10"><Loader2 className="animate-spin text-cyan-500" /></div>
-              ) : recentUsers.length === 0 ? (
-                <div className="bg-white/[0.02] border border-dashed border-white/10 rounded-2xl py-10 text-center">
-                  <p className="text-xs text-gray-500 font-bold">لا يوجد مستخدمين مسجلين حالياً</p>
-                </div>
-              ) : (
-                recentUsers.map(u => (
-                  <button 
-                    key={u.id}
-                    onClick={() => {
-                      setFoundUser(u);
-                      setUserSearchEmail(u.email || '');
-                    }}
-                    className="w-full bg-white/[0.02] border border-white/5 rounded-xl p-3 flex items-center justify-between hover:bg-white/[0.05] transition-all"
-                  >
-                    <div className="text-right">
-                      <p className="text-xs font-bold text-white">
-                        {u.first_name || u.last_name 
-                          ? `${u.first_name || ''} ${u.last_name || ''}`.trim() 
-                          : 'مستخدم بدون اسم'}
-                      </p>
-                      <p className="text-[9px] text-gray-500">{u.email || 'لا يوجد بريد'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-cyan-500 font-bold">{u.balance} ل.س</p>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'settings' && (
-          <div className="space-y-6">
-            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 space-y-4">
-              <h3 className="text-xs font-black text-white uppercase tracking-widest">إعدادات النظام</h3>
-              <p className="text-[10px] text-gray-400 leading-relaxed">
-                إذا كنت تواجه مشاكل في رفع الصور، يمكنك محاولة تهيئة مخزن الصور تلقائياً من هنا.
-              </p>
-              <button 
-                onClick={initializeStorage}
-                disabled={isInitializingStorage}
-                className="w-full bg-white/5 border border-white/10 text-white font-black py-3 rounded-xl text-[10px] hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-              >
-                {isInitializingStorage ? <Loader2 className="animate-spin w-4 h-4" /> : <Upload size={14} />}
-                تهيئة مخزن الصور (Receipts Bucket)
-              </button>
-            </div>
-
-            <div className="bg-red-500/5 border border-red-500/10 rounded-2xl p-5 space-y-3">
-              <h3 className="text-xs font-black text-red-500 uppercase tracking-widest">ملاحظة هامة</h3>
-              <p className="text-[10px] text-gray-400 leading-relaxed">
-                في حال فشل الزر أعلاه، يجب عليك الدخول إلى لوحة تحكم Supabase وإنشاء Bucket باسم <span className="text-white font-mono">receipts</span> وجعله <span className="text-white">Public</span>.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -2098,6 +1149,34 @@ export default function App() {
   const [adminWithdrawals, setAdminWithdrawals] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
+  const [unreadSupport, setUnreadSupport] = useState(0);
+
+  useEffect(() => {
+    if (!supabaseUser) return;
+    
+    // Subscribe to unread messages
+    const subscription = supabase
+      .channel('user_support_unread')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'support_chats',
+        filter: `user_id=eq.${supabaseUser.id}`
+      }, (payload) => {
+        setUnreadSupport((payload.new as any).unread_count_user || 0);
+      })
+      .subscribe();
+
+    // Initial fetch
+    supabase.from('support_chats').select('unread_count_user').eq('user_id', supabaseUser.id).maybeSingle().then(({ data }) => {
+      if (data) setUnreadSupport(data.unread_count_user);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [supabaseUser]);
   const [showDailyWheel, setShowDailyWheel] = useState(false);
   const [lastRewardAt, setLastRewardAt] = useState<string | null>(null);
   const [showTour, setShowTour] = useState(false);
@@ -2841,6 +1920,20 @@ export default function App() {
       setRechargeStatus('idle');
     }
   };
+
+  if (showAdminPanel) {
+    return (
+      <AdminPanel 
+        onClose={() => setShowAdminPanel(false)} 
+        requests={adminRequests} 
+        withdrawals={adminWithdrawals}
+        onRefresh={fetchAdminRequests}
+        addNotification={addNotification}
+        setRequests={setAdminRequests}
+        setWithdrawals={setAdminWithdrawals}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#000000] text-white font-sans selection:bg-cyan-500/30 overflow-x-hidden" dir="rtl">
@@ -4186,32 +3279,40 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Admin Panel Modal */}
+      {/* Floating Support Button */}
+      {supabaseUser && !showSupport && (
+        <motion.button
+          initial={{ x: 100 }}
+          animate={{ x: 0 }}
+          whileHover={{ x: -10 }}
+          onClick={() => setShowSupport(true)}
+          className="fixed right-0 top-[calc(50%+60px)] -translate-y-1/2 z-[90] flex items-center gap-3 pl-4 pr-3 py-3 rounded-l-3xl border-y border-l transition-all shadow-2xl bg-gradient-to-r from-cyan-500 to-blue-600 border-white/20 text-black shadow-cyan-500/20"
+        >
+          <div className="relative">
+            <MessageCircle size={24} className="text-black" />
+            {unreadSupport > 0 && (
+              <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full border-2 border-cyan-500 animate-bounce flex items-center justify-center text-[8px] font-bold text-white">
+                {unreadSupport}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="text-[10px] font-black uppercase tracking-tighter leading-none">الدعم</span>
+            <span className="text-[8px] font-bold uppercase tracking-widest opacity-70 leading-none">الفني</span>
+          </div>
+          {unreadSupport > 0 && (
+            <motion.div
+              animate={{ opacity: [0, 1, 0] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              className="absolute inset-0 rounded-l-3xl bg-white/20 pointer-events-none"
+            />
+          )}
+        </motion.button>
+      )}
+
       <AnimatePresence>
-        {showAdminPanel && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              className="bg-[#1a1c20] border border-white/10 rounded-[2.5rem] w-full max-w-lg h-[80vh] p-6 relative overflow-hidden flex flex-col shadow-2xl"
-            >
-              <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 blur-[100px] rounded-full -mr-32 -mt-32" />
-              <AdminPanel 
-                onClose={() => setShowAdminPanel(false)} 
-                requests={adminRequests} 
-                withdrawals={adminWithdrawals}
-                onRefresh={fetchAdminRequests}
-                addNotification={addNotification}
-                setRequests={setAdminRequests}
-                setWithdrawals={setAdminWithdrawals}
-              />
-            </motion.div>
-          </motion.div>
+        {showSupport && supabaseUser && (
+          <SupportChat userId={supabaseUser.id} onClose={() => setShowSupport(false)} />
         )}
       </AnimatePresence>
 
