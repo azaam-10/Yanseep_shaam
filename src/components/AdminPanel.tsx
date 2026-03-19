@@ -532,39 +532,39 @@ export default function AdminPanel({
     <div className="fixed inset-0 z-[200] bg-[#0a0b0d] flex flex-col md:flex-row overflow-hidden font-sans" dir="rtl">
       {/* Sidebar */}
       <div className="w-full md:w-72 bg-[#14161a] border-l border-white/5 flex flex-col h-auto md:h-full z-10">
-        <div className="p-6 flex items-center justify-between md:justify-start gap-4 border-b border-white/5">
+        <div className="p-4 md:p-6 flex items-center justify-between md:justify-start gap-4 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center text-black shadow-lg shadow-cyan-500/20">
-              <ShieldCheck size={24} />
+            <div className="w-9 h-9 md:w-10 md:h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center text-black shadow-lg shadow-cyan-500/20">
+              <ShieldCheck size={20} className="md:w-6 md:h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white leading-none">لوحة التحكم</h2>
-              <p className="text-[9px] text-cyan-500 font-bold uppercase tracking-widest mt-1">Admin Dashboard</p>
+              <h2 className="text-base md:text-lg font-black text-white leading-none">لوحة التحكم</h2>
+              <p className="text-[8px] md:text-[9px] text-cyan-500 font-bold uppercase tracking-widest mt-1">Admin Dashboard</p>
             </div>
           </div>
           <button 
             onClick={onClose}
             className="md:hidden p-2 bg-white/5 rounded-lg text-gray-400"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        <nav className="flex-1 p-4 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto custom-scrollbar no-scrollbar">
+        <nav className="flex-1 p-2 md:p-4 flex md:flex-col gap-1.5 md:gap-2 overflow-x-auto md:overflow-y-auto custom-scrollbar no-scrollbar">
           {menuItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as any)}
-              className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all whitespace-nowrap md:whitespace-normal group ${
+              className={`flex items-center gap-2.5 md:gap-3 px-3 md:px-4 py-2.5 md:py-3.5 rounded-xl md:rounded-2xl transition-all whitespace-nowrap md:whitespace-normal group ${
                 activeTab === item.id 
                   ? 'bg-cyan-500 text-black font-black shadow-lg shadow-cyan-500/20' 
                   : 'text-gray-400 hover:bg-white/5 hover:text-white'
               }`}
             >
-              <item.icon size={20} className={activeTab === item.id ? 'text-black' : 'text-gray-500 group-hover:text-cyan-500'} />
-              <span className="text-sm">{item.label}</span>
+              <item.icon size={18} className={activeTab === item.id ? 'text-black' : 'text-gray-500 group-hover:text-cyan-500'} />
+              <span className="text-xs md:text-sm">{item.label}</span>
               {item.count !== undefined && item.count > 0 && (
-                <span className={`mr-auto px-2 py-0.5 rounded-full text-[10px] font-black ${
+                <span className={`mr-auto px-1.5 py-0.5 rounded-full text-[9px] md:text-[10px] font-black ${
                   activeTab === item.id ? 'bg-black/20 text-black' : 'bg-cyan-500/20 text-cyan-500'
                 }`}>
                   {item.count}
@@ -574,12 +574,12 @@ export default function AdminPanel({
           ))}
         </nav>
 
-        <div className="p-4 border-t border-white/5 hidden md:block">
+        <div className="p-3 md:p-4 border-t border-white/5 hidden md:block">
           <button 
             onClick={onClose}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20 font-black text-sm hover:bg-red-500/20 transition-all"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 md:py-3 rounded-xl md:rounded-2xl bg-red-500/10 text-red-500 border border-red-500/20 font-black text-xs md:text-sm hover:bg-red-500/20 transition-all"
           >
-            <ArrowRight size={18} />
+            <ArrowRight size={16} md:size={18} />
             <span>خروج من اللوحة</span>
           </button>
         </div>
@@ -588,36 +588,36 @@ export default function AdminPanel({
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-full bg-[#0a0b0d] relative">
         {/* Header */}
-        <header className="h-20 border-b border-white/5 flex items-center justify-between px-8 bg-[#0a0b0d]/80 backdrop-blur-xl sticky top-0 z-20">
+        <header className="h-14 md:h-20 border-b border-white/5 flex items-center justify-between px-4 md:px-8 bg-[#0a0b0d]/80 backdrop-blur-xl sticky top-0 z-20">
           <div className="flex items-center gap-4">
-            <h3 className="text-lg font-black text-white">
+            <h3 className="text-base md:text-lg font-black text-white">
               {menuItems.find(i => i.id === activeTab)?.label}
             </h3>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 md:gap-3">
             <button 
               onClick={() => {
                 onRefresh();
                 if (activeTab === 'users') fetchRecentUsers();
                 addNotification('تم تحديث البيانات');
               }} 
-              className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-cyan-500 text-xs font-bold"
+              className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 bg-white/5 rounded-lg md:rounded-xl hover:bg-white/10 transition-all text-cyan-500 text-[10px] md:text-xs font-bold"
             >
-              <RotateCcw size={16} />
+              <RotateCcw size={14} md:size={16} />
               <span className="hidden sm:inline">تحديث</span>
             </button>
             <button 
               onClick={onClose}
-              className="hidden md:flex p-2.5 bg-white/5 rounded-xl hover:bg-white/10 transition-all text-gray-400"
+              className="hidden md:flex p-2 md:p-2.5 bg-white/5 rounded-lg md:rounded-xl hover:bg-white/10 transition-all text-gray-400"
             >
-              <X size={20} />
+              <X size={18} md:size={20} />
             </button>
           </div>
         </header>
 
         {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto p-3 md:p-8 custom-scrollbar">
           <div className="max-w-6xl mx-auto">
             <AnimatePresence mode="wait">
               <motion.div
@@ -628,55 +628,55 @@ export default function AdminPanel({
                 transition={{ duration: 0.2 }}
               >
                 {activeTab === 'dashboard' && (
-                  <div className="space-y-8">
+                  <div className="space-y-4 md:space-y-8">
                     {/* Stats Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <div className="bg-[#14161a] border border-white/5 p-6 rounded-[2rem] relative overflow-hidden group hover:border-cyan-500/30 transition-all">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-3xl rounded-full -mr-16 -mt-16 group-hover:bg-cyan-500/10 transition-all" />
-                        <div className="flex items-center gap-4 mb-4">
-                          <div className="w-12 h-12 bg-cyan-500/10 rounded-2xl flex items-center justify-center text-cyan-500">
-                            <Users size={24} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                      <div className="bg-[#14161a] border border-white/5 p-3.5 md:p-6 rounded-2xl md:rounded-[2rem] relative overflow-hidden group hover:border-cyan-500/30 transition-all">
+                        <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-cyan-500/5 blur-3xl rounded-full -mr-12 -mt-12 md:-mr-16 md:-mt-16 group-hover:bg-cyan-500/10 transition-all" />
+                        <div className="flex items-center gap-3 md:gap-4 mb-2.5 md:mb-4">
+                          <div className="w-10 h-10 md:w-12 md:h-12 bg-cyan-500/10 rounded-xl md:rounded-2xl flex items-center justify-center text-cyan-500">
+                            <Users size={20} md:size={24} />
                           </div>
                           <div>
-                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">إجمالي المستخدمين</p>
-                            <h4 className="text-2xl font-black text-white">{stats.totalUsers.toLocaleString()}</h4>
+                            <p className="text-[9px] md:text-[10px] text-gray-500 font-black uppercase tracking-widest">إجمالي المستخدمين</p>
+                            <h4 className="text-xl md:text-2xl font-black text-white">{stats.totalUsers.toLocaleString()}</h4>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
-                          <TrendingUp size={12} className="text-green-500" />
+                        <div className="flex items-center gap-2 text-[9px] md:text-[10px] text-gray-500 font-bold">
+                          <TrendingUp size={10} md:size={12} className="text-green-500" />
                           <span>نمو مستمر في قاعدة المستخدمين</span>
                         </div>
                       </div>
 
-                      <div className="bg-[#14161a] border border-white/5 p-6 rounded-[2rem] relative overflow-hidden group hover:border-green-500/30 transition-all">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 blur-3xl rounded-full -mr-16 -mt-16 group-hover:bg-green-500/10 transition-all" />
-                        <div className="flex items-center gap-4 mb-4">
-                          <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500">
-                            <Wallet size={24} />
+                      <div className="bg-[#14161a] border border-white/5 p-3.5 md:p-6 rounded-2xl md:rounded-[2rem] relative overflow-hidden group hover:border-green-500/30 transition-all">
+                        <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-green-500/5 blur-3xl rounded-full -mr-12 -mt-12 md:-mr-16 md:-mt-16 group-hover:bg-green-500/10 transition-all" />
+                        <div className="flex items-center gap-3 md:gap-4 mb-2.5 md:mb-4">
+                          <div className="w-10 h-10 md:w-12 md:h-12 bg-green-500/10 rounded-xl md:rounded-2xl flex items-center justify-center text-green-500">
+                            <Wallet size={20} md:size={24} />
                           </div>
                           <div>
-                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">إجمالي أرصدة النظام</p>
-                            <h4 className="text-2xl font-black text-white">{stats.totalBalance.toLocaleString()} <span className="text-xs text-green-500">ل.س</span></h4>
+                            <p className="text-[9px] md:text-[10px] text-gray-500 font-black uppercase tracking-widest">إجمالي أرصدة النظام</p>
+                            <h4 className="text-xl md:text-2xl font-black text-white">{stats.totalBalance.toLocaleString()} <span className="text-[10px] md:text-xs text-green-500">ل.س</span></h4>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-gray-500 font-bold">
-                          <Activity size={12} className="text-cyan-500" />
+                        <div className="flex items-center gap-2 text-[9px] md:text-[10px] text-gray-500 font-bold">
+                          <Activity size={10} md:size={12} className="text-cyan-500" />
                           <span>سيولة النظام الحالية</span>
                         </div>
                       </div>
 
-                      <div className="bg-[#14161a] border border-white/5 p-6 rounded-[2rem] relative overflow-hidden group hover:border-yellow-500/30 transition-all">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/5 blur-3xl rounded-full -mr-16 -mt-16 group-hover:bg-yellow-500/10 transition-all" />
-                        <div className="flex items-center gap-4 mb-4">
-                          <div className="w-12 h-12 bg-yellow-500/10 rounded-2xl flex items-center justify-center text-yellow-500">
-                            <Ticket size={24} />
+                      <div className="bg-[#14161a] border border-white/5 p-3.5 md:p-6 rounded-2xl md:rounded-[2rem] relative overflow-hidden group hover:border-yellow-500/30 transition-all">
+                        <div className="absolute top-0 right-0 w-24 h-24 md:w-32 md:h-32 bg-yellow-500/5 blur-3xl rounded-full -mr-12 -mt-12 md:-mr-16 md:-mt-16 group-hover:bg-yellow-500/10 transition-all" />
+                        <div className="flex items-center gap-3 md:gap-4 mb-2.5 md:mb-4">
+                          <div className="w-10 h-10 md:w-12 md:h-12 bg-yellow-500/10 rounded-xl md:rounded-2xl flex items-center justify-center text-yellow-500">
+                            <Ticket size={20} md:size={24} />
                           </div>
                           <div>
-                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">إحصائيات الكروت</p>
-                            <h4 className="text-2xl font-black text-white">{stats.soldTickets.toLocaleString()} / {stats.totalTickets.toLocaleString()}</h4>
+                            <p className="text-[9px] md:text-[10px] text-gray-500 font-black uppercase tracking-widest">إحصائيات الكروت</p>
+                            <h4 className="text-xl md:text-2xl font-black text-white">{stats.soldTickets.toLocaleString()} / {stats.totalTickets.toLocaleString()}</h4>
                           </div>
                         </div>
-                        <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                        <div className="w-full bg-white/5 h-1 md:h-1.5 rounded-full overflow-hidden">
                           <div 
                             className="bg-yellow-500 h-full transition-all duration-1000" 
                             style={{ width: `${(stats.soldTickets / (stats.totalTickets || 1)) * 100}%` }}
@@ -686,69 +686,69 @@ export default function AdminPanel({
                     </div>
 
                     {/* Quick Actions & Pending Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
                       {/* Pending Requests Summary */}
-                      <div className="space-y-4">
+                      <div className="space-y-3 md:space-y-4">
                         <div className="flex items-center justify-between px-2">
-                          <h4 className="text-sm font-black text-white uppercase tracking-widest">الطلبات المعلقة</h4>
+                          <h4 className="text-xs md:text-sm font-black text-white uppercase tracking-widest">الطلبات المعلقة</h4>
                           <button 
                             onClick={() => setActiveTab('requests')}
-                            className="text-[10px] font-black text-cyan-500 hover:text-cyan-400 transition-colors"
+                            className="text-[9px] md:text-[10px] font-black text-cyan-500 hover:text-cyan-400 transition-colors"
                           >
                             عرض الكل
                           </button>
                         </div>
-                        <div className="grid grid-cols-1 gap-4">
-                          <div className="bg-[#14161a] border border-white/5 p-5 rounded-3xl flex items-center justify-between group hover:bg-white/[0.02] transition-all cursor-pointer" onClick={() => setActiveTab('requests')}>
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center text-cyan-500">
-                                <CreditCard size={20} />
+                        <div className="grid grid-cols-1 gap-3 md:gap-4">
+                          <div className="bg-[#14161a] border border-white/5 p-4 md:p-5 rounded-2xl md:rounded-3xl flex items-center justify-between group hover:bg-white/[0.02] transition-all cursor-pointer" onClick={() => setActiveTab('requests')}>
+                            <div className="flex items-center gap-3 md:gap-4">
+                              <div className="w-9 h-9 md:w-10 md:h-10 bg-cyan-500/10 rounded-lg md:rounded-xl flex items-center justify-center text-cyan-500">
+                                <CreditCard size={18} md:size={20} />
                               </div>
                               <div>
-                                <p className="text-sm font-bold text-white">طلبات الشحن</p>
-                                <p className="text-[10px] text-gray-500">هناك {stats.pendingRecharge} طلبات بانتظار المراجعة</p>
+                                <p className="text-xs md:text-sm font-bold text-white">طلبات الشحن</p>
+                                <p className="text-[9px] md:text-[10px] text-gray-500">هناك {stats.pendingRecharge} طلبات بانتظار المراجعة</p>
                               </div>
                             </div>
-                            <ChevronLeft size={18} className="text-gray-600 group-hover:text-cyan-500 transition-all" />
+                            <ChevronLeft size={16} md:size={18} className="text-gray-600 group-hover:text-cyan-500 transition-all" />
                           </div>
 
-                          <div className="bg-[#14161a] border border-white/5 p-5 rounded-3xl flex items-center justify-between group hover:bg-white/[0.02] transition-all cursor-pointer" onClick={() => setActiveTab('withdrawals')}>
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 bg-red-500/10 rounded-xl flex items-center justify-center text-red-500">
-                                <Wallet size={20} />
+                          <div className="bg-[#14161a] border border-white/5 p-4 md:p-5 rounded-2xl md:rounded-3xl flex items-center justify-between group hover:bg-white/[0.02] transition-all cursor-pointer" onClick={() => setActiveTab('withdrawals')}>
+                            <div className="flex items-center gap-3 md:gap-4">
+                              <div className="w-9 h-9 md:w-10 md:h-10 bg-red-500/10 rounded-lg md:rounded-xl flex items-center justify-center text-red-500">
+                                <Wallet size={18} md:size={20} />
                               </div>
                               <div>
-                                <p className="text-sm font-bold text-white">طلبات السحب</p>
-                                <p className="text-[10px] text-gray-500">هناك {stats.pendingWithdrawal} طلبات بانتظار المراجعة</p>
+                                <p className="text-xs md:text-sm font-bold text-white">طلبات السحب</p>
+                                <p className="text-[9px] md:text-[10px] text-gray-500">هناك {stats.pendingWithdrawal} طلبات بانتظار المراجعة</p>
                               </div>
                             </div>
-                            <ChevronLeft size={18} className="text-gray-600 group-hover:text-red-500 transition-all" />
+                            <ChevronLeft size={16} md:size={18} className="text-gray-600 group-hover:text-red-500 transition-all" />
                           </div>
                         </div>
                       </div>
 
                       {/* Quick Actions */}
-                      <div className="space-y-4">
-                        <h4 className="text-sm font-black text-white uppercase tracking-widest px-2">إجراءات سريعة</h4>
-                        <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-3 md:space-y-4">
+                        <h4 className="text-xs md:text-sm font-black text-white uppercase tracking-widest px-2">إجراءات سريعة</h4>
+                        <div className="grid grid-cols-2 gap-3 md:gap-4">
                           <button 
                             onClick={() => setActiveTab('tickets')}
-                            className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 p-6 rounded-3xl flex flex-col items-center gap-3 hover:from-cyan-500/20 hover:to-blue-500/20 transition-all group"
+                            className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 p-4 md:p-6 rounded-2xl md:rounded-3xl flex flex-col items-center gap-2 md:gap-3 hover:from-cyan-500/20 hover:to-blue-500/20 transition-all group"
                           >
-                            <div className="w-12 h-12 bg-cyan-500 rounded-2xl flex items-center justify-center text-black shadow-lg shadow-cyan-500/20 group-hover:scale-110 transition-transform">
-                              <Ticket size={24} />
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-cyan-500 rounded-xl md:rounded-2xl flex items-center justify-center text-black shadow-lg shadow-cyan-500/20 group-hover:scale-110 transition-transform">
+                              <Ticket size={20} md:size={24} />
                             </div>
-                            <span className="text-xs font-black text-white">إضافة كروت</span>
+                            <span className="text-[10px] md:text-xs font-black text-white">إضافة كروت</span>
                           </button>
 
                           <button 
                             onClick={() => setActiveTab('users')}
-                            className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 p-6 rounded-3xl flex flex-col items-center gap-3 hover:from-purple-500/20 hover:to-pink-500/20 transition-all group"
+                            className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/20 p-4 md:p-6 rounded-2xl md:rounded-3xl flex flex-col items-center gap-2 md:gap-3 hover:from-purple-500/20 hover:to-pink-500/20 transition-all group"
                           >
-                            <div className="w-12 h-12 bg-purple-500 rounded-2xl flex items-center justify-center text-black shadow-lg shadow-purple-500/20 group-hover:scale-110 transition-transform">
-                              <Users size={24} />
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-500 rounded-xl md:rounded-2xl flex items-center justify-center text-black shadow-lg shadow-purple-500/20 group-hover:scale-110 transition-transform">
+                              <Users size={20} md:size={24} />
                             </div>
-                            <span className="text-xs font-black text-white">إدارة المستخدمين</span>
+                            <span className="text-[10px] md:text-xs font-black text-white">إدارة المستخدمين</span>
                           </button>
                         </div>
                       </div>
@@ -757,44 +757,44 @@ export default function AdminPanel({
                 )}
 
                 {activeTab === 'requests' && (
-                  <div className="space-y-6">
+                  <div className="space-y-4 md:space-y-6">
                     {requests.length === 0 ? (
-                      <div className="py-32 flex flex-col items-center justify-center text-gray-500 bg-white/[0.02] border border-dashed border-white/10 rounded-[2.5rem]">
-                        <CreditCard size={48} className="mb-4 opacity-20" />
-                        <p className="text-sm font-bold">لا توجد طلبات شحن معلقة حالياً</p>
+                      <div className="py-20 md:py-32 flex flex-col items-center justify-center text-gray-500 bg-white/[0.02] border border-dashed border-white/10 rounded-2xl md:rounded-[2.5rem]">
+                        <CreditCard size={32} md:size={48} className="mb-3 md:mb-4 opacity-20" />
+                        <p className="text-xs md:text-sm font-bold">لا توجد طلبات شحن معلقة حالياً</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                         {requests.map((req) => (
-                          <div key={req.id} className="bg-[#14161a] border border-white/10 rounded-[2rem] p-6 space-y-6 shadow-xl">
+                          <div key={req.id} className="bg-[#14161a] border border-white/10 rounded-2xl md:rounded-[2rem] p-4 md:p-6 space-y-4 md:space-y-6 shadow-xl">
                             <div className="flex justify-between items-start">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-cyan-500 font-black text-lg">
+                              <div className="flex items-center gap-2.5 md:gap-3">
+                                <div className="w-10 h-10 md:w-12 md:h-12 bg-white/5 rounded-xl md:rounded-2xl flex items-center justify-center text-cyan-500 font-black text-base md:text-lg">
                                   {req.profiles?.first_name?.[0] || 'U'}
                                 </div>
                                 <div>
-                                  <p className="text-base font-bold text-white">{req.profiles?.first_name} {req.profiles?.last_name || ''}</p>
-                                  <p className="text-xs text-gray-500">{req.user_email}</p>
+                                  <p className="text-sm md:text-base font-bold text-white leading-tight">{req.profiles?.first_name} {req.profiles?.last_name || ''}</p>
+                                  <p className="text-[10px] md:text-xs text-gray-500 truncate max-w-[150px] md:max-w-none">{req.user_email}</p>
                                 </div>
                               </div>
-                              <div className="text-[10px] text-gray-500 font-mono bg-white/5 px-3 py-1 rounded-full">
+                              <div className="text-[8px] md:text-[10px] text-gray-500 font-mono bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full">
                                 {new Date(req.created_at).toLocaleTimeString('ar-SY')}
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-between p-4 bg-black/40 rounded-2xl border border-white/5">
+                            <div className="flex items-center justify-between p-3 md:p-4 bg-black/40 rounded-xl md:rounded-2xl border border-white/5">
                               <div>
-                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">الرصيد الحالي</p>
-                                <p className="text-sm font-black text-cyan-500">{req.profiles?.balance || 0} ل.س</p>
+                                <p className="text-[8px] md:text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-0.5 md:mb-1">الرصيد الحالي</p>
+                                <p className="text-xs md:text-sm font-black text-cyan-500">{req.profiles?.balance || 0} ل.س</p>
                               </div>
                               <div className="text-left">
-                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">رقم الهاتف</p>
-                                <p className="text-sm font-black text-white">{req.profiles?.phone || '---'}</p>
+                                <p className="text-[8px] md:text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-0.5 md:mb-1">رقم الهاتف</p>
+                                <p className="text-xs md:text-sm font-black text-white">{req.profiles?.phone || '---'}</p>
                               </div>
                             </div>
 
                             {req.receipt_url && (
-                              <div className="relative group rounded-2xl overflow-hidden border border-white/10 bg-black/40 aspect-video">
+                              <div className="relative group rounded-xl md:rounded-2xl overflow-hidden border border-white/10 bg-black/40 aspect-video">
                                 <img src={req.receipt_url} alt="Receipt" className="w-full h-full object-contain" />
                                 <a 
                                   href={req.receipt_url} 
@@ -802,35 +802,35 @@ export default function AdminPanel({
                                   rel="noreferrer"
                                   className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all"
                                 >
-                                  <div className="bg-white text-black px-6 py-2.5 rounded-xl font-black text-xs flex items-center gap-2">
-                                    <Eye size={18} />
+                                  <div className="bg-white text-black px-4 md:px-6 py-2 md:py-2.5 rounded-lg md:rounded-xl font-black text-[10px] md:text-xs flex items-center gap-2">
+                                    <Eye size={16} md:size={18} />
                                     عرض الإيصال
                                   </div>
                                 </a>
                               </div>
                             )}
 
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-2.5 md:gap-3">
                               <div className="relative">
                                 <input 
                                   type="number" 
                                   placeholder="المبلغ المراد شحنه"
-                                  className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-6 text-sm outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all text-center font-black"
+                                  className="w-full bg-black/40 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm outline-none focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all text-center font-black"
                                   onChange={(e) => setRechargeAmount(e.target.value)}
                                 />
                               </div>
-                              <div className="flex gap-3">
+                              <div className="flex gap-2 md:gap-3">
                                 <button 
                                   onClick={() => handleApprove(req.id, req.user_id)}
                                   disabled={processingId === req.id}
-                                  className="flex-1 bg-cyan-500 text-black font-black py-4 rounded-2xl text-sm hover:bg-cyan-400 transition-all disabled:opacity-50 shadow-lg shadow-cyan-500/20 flex items-center justify-center"
+                                  className="flex-1 bg-cyan-500 text-black font-black py-3 md:py-4 rounded-xl md:rounded-2xl text-xs md:text-sm hover:bg-cyan-400 transition-all disabled:opacity-50 shadow-lg shadow-cyan-500/20 flex items-center justify-center"
                                 >
-                                  {processingId === req.id ? <Loader2 className="animate-spin w-5 h-5" /> : 'موافقة وشحن'}
+                                  {processingId === req.id ? <Loader2 className="animate-spin w-4 h-4 md:w-5 md:h-5" /> : 'موافقة وشحن'}
                                 </button>
                                 <button 
                                   onClick={() => handleReject(req.id)}
                                   disabled={processingId === req.id}
-                                  className="px-8 bg-red-500/10 text-red-500 border border-red-500/20 font-black py-4 rounded-2xl text-sm hover:bg-red-500/20 transition-all disabled:opacity-50"
+                                  className="px-6 md:px-8 bg-red-500/10 text-red-500 border border-red-500/20 font-black py-3 md:py-4 rounded-xl md:rounded-2xl text-xs md:text-sm hover:bg-red-500/20 transition-all disabled:opacity-50"
                                 >
                                   رفض
                                 </button>
@@ -844,59 +844,59 @@ export default function AdminPanel({
                 )}
 
                 {activeTab === 'withdrawals' && (
-                  <div className="space-y-6">
+                  <div className="space-y-4 md:space-y-6">
                     {withdrawals.length === 0 ? (
-                      <div className="py-32 flex flex-col items-center justify-center text-gray-500 bg-white/[0.02] border border-dashed border-white/10 rounded-[2.5rem]">
-                        <LayoutDashboard size={48} className="mb-4 opacity-20" />
-                        <p className="text-sm font-bold">لا توجد طلبات سحب معلقة حالياً</p>
+                      <div className="py-20 md:py-32 flex flex-col items-center justify-center text-gray-500 bg-white/[0.02] border border-dashed border-white/10 rounded-2xl md:rounded-[2.5rem]">
+                        <LayoutDashboard size={32} md:size={48} className="mb-3 md:mb-4 opacity-20" />
+                        <p className="text-xs md:text-sm font-bold">لا توجد طلبات سحب معلقة حالياً</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
                         {withdrawals.map((req) => (
-                          <div key={req.id} className="bg-[#14161a] border border-white/10 rounded-[2rem] p-6 space-y-6 shadow-xl">
+                          <div key={req.id} className="bg-[#14161a] border border-white/10 rounded-2xl md:rounded-[2rem] p-4 md:p-6 space-y-4 md:space-y-6 shadow-xl">
                             <div className="flex justify-between items-start">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-red-500 font-black text-lg">
+                              <div className="flex items-center gap-2.5 md:gap-3">
+                                <div className="w-10 h-10 md:w-12 md:h-12 bg-white/5 rounded-xl md:rounded-2xl flex items-center justify-center text-red-500 font-black text-base md:text-lg">
                                   {req.profiles?.first_name?.[0] || 'U'}
                                 </div>
                                 <div>
-                                  <p className="text-base font-bold text-white">{req.profiles?.first_name} {req.profiles?.last_name || ''}</p>
-                                  <p className="text-xs text-gray-500">{req.profiles?.email}</p>
+                                  <p className="text-sm md:text-base font-bold text-white leading-tight">{req.profiles?.first_name} {req.profiles?.last_name || ''}</p>
+                                  <p className="text-[10px] md:text-xs text-gray-500 truncate max-w-[150px] md:max-w-none">{req.profiles?.email}</p>
                                 </div>
                               </div>
-                              <div className="text-[10px] text-gray-500 font-mono bg-white/5 px-3 py-1 rounded-full">
+                              <div className="text-[8px] md:text-[10px] text-gray-500 font-mono bg-white/5 px-2 md:px-3 py-0.5 md:py-1 rounded-full">
                                 {new Date(req.created_at).toLocaleTimeString('ar-SY')}
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-3">
-                              <div className="p-4 bg-red-500/5 rounded-2xl border border-red-500/10">
-                                <p className="text-[10px] text-red-500/60 font-bold uppercase tracking-widest mb-1">المبلغ المطلوب</p>
-                                <p className="text-lg font-black text-red-500">{req.amount} ل.س</p>
+                            <div className="grid grid-cols-2 gap-2.5 md:gap-3">
+                              <div className="p-3 md:p-4 bg-red-500/5 rounded-xl md:rounded-2xl border border-red-500/10">
+                                <p className="text-[8px] md:text-[10px] text-red-500/60 font-bold uppercase tracking-widest mb-0.5 md:mb-1">المبلغ المطلوب</p>
+                                <p className="text-base md:text-lg font-black text-red-500">{req.amount} ل.س</p>
                               </div>
-                              <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">الرصيد المتاح</p>
-                                <p className="text-lg font-black text-white">{req.profiles?.balance} ل.س</p>
+                              <div className="p-3 md:p-4 bg-white/5 rounded-xl md:rounded-2xl border border-white/10">
+                                <p className="text-[8px] md:text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-0.5 md:mb-1">الرصيد المتاح</p>
+                                <p className="text-base md:text-lg font-black text-white">{req.profiles?.balance} ل.س</p>
                               </div>
                             </div>
 
-                            <div className="bg-black/40 border border-white/10 rounded-2xl p-4 space-y-2">
-                              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">عنوان شام كاش للسحب</p>
-                              <p className="text-sm font-mono text-cyan-500 break-all leading-relaxed">{req.sham_cash_address}</p>
+                            <div className="bg-black/40 border border-white/10 rounded-xl md:rounded-2xl p-3 md:p-4 space-y-1.5 md:space-y-2">
+                              <p className="text-[8px] md:text-[10px] text-gray-500 font-bold uppercase tracking-widest">عنوان شام كاش للسحب</p>
+                              <p className="text-xs md:text-sm font-mono text-cyan-500 break-all leading-relaxed">{req.sham_cash_address}</p>
                             </div>
 
-                            <div className="flex gap-3">
+                            <div className="flex gap-2 md:gap-3">
                               <button 
                                 onClick={() => handleApproveWithdrawal(req.id, req.user_id, req.amount)}
                                 disabled={processingId === req.id}
-                                className="flex-1 bg-cyan-500 text-black font-black py-4 rounded-2xl text-sm hover:bg-cyan-400 transition-all disabled:opacity-50 shadow-lg shadow-cyan-500/20 flex items-center justify-center"
+                                className="flex-1 bg-cyan-500 text-black font-black py-3 md:py-4 rounded-xl md:rounded-2xl text-xs md:text-sm hover:bg-cyan-400 transition-all disabled:opacity-50 shadow-lg shadow-cyan-500/20 flex items-center justify-center"
                               >
-                                {processingId === req.id ? <Loader2 className="animate-spin w-5 h-5" /> : 'موافقة على السحب'}
+                                {processingId === req.id ? <Loader2 className="animate-spin w-4 h-4 md:w-5 md:h-5" /> : 'موافقة على السحب'}
                               </button>
                               <button 
                                 onClick={() => handleRejectWithdrawal(req.id)}
                                 disabled={processingId === req.id}
-                                className="px-8 bg-red-500/10 text-red-500 border border-red-500/20 font-black py-4 rounded-2xl text-sm hover:bg-red-500/20 transition-all disabled:opacity-50"
+                                className="px-6 md:px-8 bg-red-500/10 text-red-500 border border-red-500/20 font-black py-3 md:py-4 rounded-xl md:rounded-2xl text-xs md:text-sm hover:bg-red-500/20 transition-all disabled:opacity-50"
                               >
                                 رفض
                               </button>
@@ -909,42 +909,42 @@ export default function AdminPanel({
                 )}
 
                 {activeTab === 'tickets' && (
-                  <div className="max-w-2xl mx-auto space-y-8">
-                    <div className="bg-[#14161a] border border-white/10 rounded-[2.5rem] p-8 space-y-8 shadow-xl">
-                      <div className="space-y-2">
-                        <h3 className="text-xl font-black text-white">توليد كروت جديدة</h3>
-                        <p className="text-xs text-gray-500">قم بتوليد مجموعة جديدة من الكروت للمتجر</p>
+                  <div className="max-w-2xl mx-auto space-y-4 md:space-y-8">
+                    <div className="bg-[#14161a] border border-white/10 rounded-2xl md:rounded-[2.5rem] p-5 md:p-8 space-y-6 md:space-y-8 shadow-xl">
+                      <div className="space-y-1.5 md:space-y-2">
+                        <h3 className="text-lg md:text-xl font-black text-white">توليد كروت جديدة</h3>
+                        <p className="text-[10px] md:text-xs text-gray-500">قم بتوليد مجموعة جديدة من الكروت للمتجر</p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-2">من رقم</label>
+                      <div className="grid grid-cols-2 gap-3 md:gap-6">
+                        <div className="space-y-1.5 md:space-y-2">
+                          <label className="text-[8px] md:text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1 md:mr-2">من رقم</label>
                           <input 
                             type="number" 
                             value={ticketStart}
                             onChange={(e) => setTicketStart(e.target.value)}
-                            className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-6 text-sm outline-none focus:border-cyan-500 transition-all font-mono"
+                            className="w-full bg-black/40 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm outline-none focus:border-cyan-500 transition-all font-mono"
                             placeholder="000001"
                           />
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-2">إلى رقم</label>
+                        <div className="space-y-1.5 md:space-y-2">
+                          <label className="text-[8px] md:text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1 md:mr-2">إلى رقم</label>
                           <input 
                             type="number" 
                             value={ticketEnd}
                             onChange={(e) => setTicketEnd(e.target.value)}
-                            className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-6 text-sm outline-none focus:border-cyan-500 transition-all font-mono"
+                            className="w-full bg-black/40 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm outline-none focus:border-cyan-500 transition-all font-mono"
                             placeholder="000100"
                           />
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest mr-2">المستوى</label>
+                      <div className="space-y-1.5 md:space-y-2">
+                        <label className="text-[8px] md:text-[10px] text-gray-500 font-black uppercase tracking-widest mr-1 md:mr-2">المستوى</label>
                         <select 
                           value={ticketLevel}
                           onChange={(e) => setTicketLevel(e.target.value)}
-                          className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-6 text-sm outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer"
+                          className="w-full bg-black/40 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 px-4 md:px-6 text-xs md:text-sm outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer"
                         >
                           <option value="0">برونز 1 (1000 كرت)</option>
                           <option value="1">برونز 2 (2000 كرت)</option>
@@ -955,33 +955,33 @@ export default function AdminPanel({
                         </select>
                       </div>
 
-                      <div className="pt-4 space-y-4">
+                      <div className="pt-2 md:pt-4 space-y-3 md:space-y-4">
                         <button 
                           onClick={handleAddTickets}
                           disabled={isAddingTickets}
-                          className="w-full bg-cyan-500 text-black font-black py-5 rounded-2xl text-sm shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all flex items-center justify-center gap-3"
+                          className="w-full bg-cyan-500 text-black font-black py-3.5 md:py-5 rounded-xl md:rounded-2xl text-xs md:text-sm shadow-xl shadow-cyan-500/20 hover:bg-cyan-400 transition-all flex items-center justify-center gap-2 md:gap-3"
                         >
-                          {isAddingTickets ? <Loader2 className="animate-spin w-6 h-6" /> : (
+                          {isAddingTickets ? <Loader2 className="animate-spin w-5 h-5 md:w-6 md:h-6" /> : (
                             <>
-                              <Plus size={20} />
+                              <Plus size={18} md:size={20} />
                               <span>إضافة الكروت إلى المتجر</span>
                             </>
                           )}
                         </button>
 
-                        <div className="pt-4 border-t border-white/5">
+                        <div className="pt-3 md:pt-4 border-t border-white/5">
                           <button 
                             onClick={handleDeleteUnsoldTickets}
                             disabled={isDeletingTickets}
-                            className={`w-full font-black py-5 rounded-2xl text-sm transition-all flex items-center justify-center gap-3 ${
+                            className={`w-full font-black py-3.5 md:py-5 rounded-xl md:rounded-2xl text-xs md:text-sm transition-all flex items-center justify-center gap-2 md:gap-3 ${
                               showDeleteConfirm 
                                 ? 'bg-red-600 text-white shadow-xl shadow-red-600/20' 
                                 : 'bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-red-500/20'
                             }`}
                           >
-                            {isDeletingTickets ? <Loader2 className="animate-spin w-6 h-6" /> : (
+                            {isDeletingTickets ? <Loader2 className="animate-spin w-5 h-5 md:w-6 md:h-6" /> : (
                               <>
-                                <Trash2 size={20} />
+                                <Trash2 size={18} md:size={20} />
                                 <span>{showDeleteConfirm ? 'تأكيد الحذف النهائي؟' : 'حذف جميع الكروت غير المباعة'}</span>
                               </>
                             )}
@@ -989,7 +989,7 @@ export default function AdminPanel({
                           {showDeleteConfirm && (
                             <button 
                               onClick={() => setShowDeleteConfirm(false)}
-                              className="w-full mt-4 text-xs text-gray-500 hover:text-white transition-colors font-bold"
+                              className="w-full mt-3 md:mt-4 text-[10px] md:text-xs text-gray-500 hover:text-white transition-colors font-bold"
                             >
                               إلغاء العملية
                             </button>
@@ -1001,30 +1001,30 @@ export default function AdminPanel({
                 )}
 
                 {activeTab === 'users' && (
-                  <div className="space-y-8">
-                    <div className="bg-[#14161a] border border-white/10 rounded-[2.5rem] p-8 space-y-6 shadow-xl">
-                      <div className="space-y-2">
-                        <h3 className="text-xl font-black text-white">إدارة المستخدمين</h3>
-                        <p className="text-xs text-gray-500">ابحث عن مستخدم لتعديل رصيده أو إدارة حسابه</p>
+                  <div className="space-y-4 md:space-y-8">
+                    <div className="bg-[#14161a] border border-white/10 rounded-2xl md:rounded-[2.5rem] p-4 md:p-8 space-y-4 md:space-y-6 shadow-xl">
+                      <div className="space-y-1.5 md:space-y-2">
+                        <h3 className="text-lg md:text-xl font-black text-white">إدارة المستخدمين</h3>
+                        <p className="text-[10px] md:text-xs text-gray-500">ابحث عن مستخدم لتعديل رصيده أو إدارة حسابه</p>
                       </div>
 
-                      <div className="flex gap-3">
+                      <div className="flex flex-col sm:flex-row gap-2.5 md:gap-3">
                         <div className="relative flex-1">
-                          <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+                          <Search className="absolute right-4 md:right-5 top-1/2 -translate-y-1/2 text-gray-500" size={18} md:size={20} />
                           <input 
                             type="text" 
                             value={userSearchEmail}
                             onChange={(e) => setUserSearchEmail(e.target.value)}
-                            className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pr-14 pl-6 text-sm outline-none focus:border-cyan-500 transition-all"
+                            className="w-full bg-black/40 border border-white/10 rounded-xl md:rounded-2xl py-3 md:py-4 pr-12 md:pr-14 pl-4 md:pl-6 text-xs md:text-sm outline-none focus:border-cyan-500 transition-all"
                             placeholder="البريد الإلكتروني أو الاسم الكامل..."
                           />
                         </div>
                         <button 
                           onClick={handleSearchUser}
                           disabled={isSearchingUser}
-                          className="bg-cyan-500 text-black px-8 rounded-2xl hover:bg-cyan-400 transition-all font-black"
+                          className="bg-cyan-500 text-black px-6 md:px-8 py-3 md:py-0 rounded-xl md:rounded-2xl hover:bg-cyan-400 transition-all font-black text-xs md:text-sm"
                         >
-                          {isSearchingUser ? <Loader2 className="animate-spin w-6 h-6" /> : 'بحث'}
+                          {isSearchingUser ? <Loader2 className="animate-spin w-5 h-5 md:w-6 md:h-6" /> : 'بحث'}
                         </button>
                       </div>
 
@@ -1034,31 +1034,31 @@ export default function AdminPanel({
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
-                            className="pt-8 border-t border-white/5 space-y-8"
+                            className="pt-4 md:pt-8 border-t border-white/5 space-y-6 md:space-y-8"
                           >
-                            <div className="flex flex-col md:flex-row justify-between items-start gap-6">
-                              <div className="flex items-center gap-4">
-                                <div className="w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-3xl flex items-center justify-center text-cyan-500 text-2xl font-black border border-cyan-500/20">
+                            <div className="flex flex-col md:flex-row justify-between items-start gap-4 md:gap-6">
+                              <div className="flex items-center gap-3 md:gap-4">
+                                <div className="w-14 h-14 md:w-20 md:h-20 bg-gradient-to-br from-cyan-500/20 to-blue-600/20 rounded-2xl md:rounded-3xl flex items-center justify-center text-cyan-500 text-xl md:text-2xl font-black border border-cyan-500/20">
                                   {foundUser.first_name?.[0] || 'U'}
                                 </div>
                                 <div>
-                                  <div className="flex items-center gap-3 mb-1">
-                                    <h4 className="text-2xl font-black text-white">
+                                  <div className="flex items-center gap-2 md:gap-3 mb-0.5 md:mb-1">
+                                    <h4 className="text-lg md:text-2xl font-black text-white leading-tight">
                                       {`${foundUser.first_name || ''} ${foundUser.last_name || ''}`.trim() || 'مستخدم بدون اسم'}
                                     </h4>
                                     {foundUser.is_frozen && (
-                                      <span className="bg-red-500 text-white text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-widest">مجمد</span>
+                                      <span className="bg-red-500 text-white text-[8px] md:text-[10px] px-2 md:px-3 py-0.5 md:py-1 rounded-full font-black uppercase tracking-widest">مجمد</span>
                                     )}
                                   </div>
-                                  <p className="text-sm text-gray-500">{foundUser.email}</p>
-                                  <div className="flex items-center gap-4 mt-3">
-                                    <div className="bg-cyan-500/10 px-4 py-1.5 rounded-xl border border-cyan-500/20">
-                                      <p className="text-[10px] text-cyan-500 font-black uppercase tracking-widest">الرصيد الحالي</p>
-                                      <p className="text-lg font-black text-white">{foundUser.balance} ل.س</p>
+                                  <p className="text-[10px] md:text-sm text-gray-500">{foundUser.email}</p>
+                                  <div className="flex items-center gap-3 md:gap-4 mt-2 md:mt-3">
+                                    <div className="bg-cyan-500/10 px-3 md:px-4 py-1 md:py-1.5 rounded-lg md:rounded-xl border border-cyan-500/20">
+                                      <p className="text-[8px] md:text-[10px] text-cyan-500 font-black uppercase tracking-widest">الرصيد</p>
+                                      <p className="text-sm md:text-lg font-black text-white">{foundUser.balance} ل.س</p>
                                     </div>
-                                    <div className="bg-white/5 px-4 py-1.5 rounded-xl border border-white/10">
-                                      <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">تاريخ الانضمام</p>
-                                      <p className="text-sm font-bold text-white">
+                                    <div className="bg-white/5 px-3 md:px-4 py-1 md:py-1.5 rounded-lg md:rounded-xl border border-white/10">
+                                      <p className="text-[8px] md:text-[10px] text-gray-500 font-black uppercase tracking-widest">تاريخ الانضمام</p>
+                                      <p className="text-[10px] md:text-sm font-bold text-white">
                                         {foundUser.created_at ? new Date(foundUser.created_at).toLocaleDateString('ar-SY') : '---'}
                                       </p>
                                     </div>
@@ -1067,35 +1067,35 @@ export default function AdminPanel({
                               </div>
                               <button 
                                 onClick={() => setFoundUser(null)}
-                                className="p-3 bg-white/5 rounded-2xl hover:bg-white/10 transition-all text-gray-400"
+                                className="p-2 md:p-3 bg-white/5 rounded-xl md:rounded-2xl hover:bg-white/10 transition-all text-gray-400"
                               >
-                                <X size={20} />
+                                <X size={18} md:size={20} />
                               </button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              <div className="space-y-4">
-                                <h5 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-                                  <CreditCard size={14} className="text-cyan-500" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+                              <div className="space-y-3 md:space-y-4">
+                                <h5 className="text-[10px] md:text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                  <CreditCard size={12} md:size={14} className="text-cyan-500" />
                                   تعديل الرصيد
                                 </h5>
-                                <div className="flex gap-3">
+                                <div className="flex gap-2 md:gap-3">
                                   <input 
                                     type="number" 
                                     value={adjustAmount}
                                     onChange={(e) => setAdjustAmount(e.target.value)}
-                                    className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-sm outline-none focus:border-cyan-500 transition-all text-center font-black"
+                                    className="flex-1 bg-black/40 border border-white/10 rounded-xl md:rounded-2xl px-4 md:px-6 py-3 md:py-4 text-xs md:text-sm outline-none focus:border-cyan-500 transition-all text-center font-black"
                                     placeholder="المبلغ"
                                   />
                                   <button 
                                     onClick={() => handleAdjustBalance('add')}
-                                    className="bg-green-500 text-black font-black px-6 rounded-2xl hover:bg-green-400 transition-all text-xs"
+                                    className="bg-green-500 text-black font-black px-4 md:px-6 rounded-xl md:rounded-2xl hover:bg-green-400 transition-all text-[10px] md:text-xs"
                                   >
                                     إضافة
                                   </button>
                                   <button 
                                     onClick={() => handleAdjustBalance('subtract')}
-                                    className="bg-red-500 text-white font-black px-6 rounded-2xl hover:bg-red-400 transition-all text-xs"
+                                    className="bg-red-500 text-white font-black px-4 md:px-6 rounded-xl md:rounded-2xl hover:bg-red-400 transition-all text-[10px] md:text-xs"
                                   >
                                     خصم
                                   </button>
@@ -1107,23 +1107,23 @@ export default function AdminPanel({
                                   <ShieldCheck size={14} className="text-cyan-500" />
                                   إجراءات الحساب
                                 </h5>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 gap-2">
                                   <button 
                                     onClick={handleToggleFreeze}
-                                    className={`flex items-center justify-center gap-3 py-4 rounded-2xl text-xs font-black transition-all ${
+                                    className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-black transition-all ${
                                       foundUser.is_frozen 
                                         ? 'bg-green-500/10 text-green-500 border border-green-500/20 hover:bg-green-500/20' 
                                         : 'bg-orange-500/10 text-orange-500 border border-orange-500/20 hover:bg-orange-500/20'
                                     }`}
                                   >
-                                    {foundUser.is_frozen ? <Unlock size={18} /> : <Lock size={18} />}
+                                    {foundUser.is_frozen ? <Unlock size={16} /> : <Lock size={16} />}
                                     <span>{foundUser.is_frozen ? 'إلغاء التجميد' : 'تجميد الحساب'}</span>
                                   </button>
                                   <button 
                                     onClick={handleDeleteUser}
-                                    className="flex items-center justify-center gap-3 bg-red-500/10 text-red-500 border border-red-500/20 py-4 rounded-2xl text-xs font-black hover:bg-red-500/20 transition-all"
+                                    className="flex items-center justify-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 py-3 rounded-xl text-xs font-black hover:bg-red-500/20 transition-all"
                                   >
-                                    <Trash2 size={18} />
+                                    <Trash2 size={16} />
                                     <span>حذف الحساب</span>
                                   </button>
                                 </div>
@@ -1150,11 +1150,11 @@ export default function AdminPanel({
                                   <p className="text-xs text-gray-600 italic font-bold">لم يقم بشراء أي كروت بعد</p>
                                 </div>
                               ) : (
-                                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
                                   {userTickets.map(t => (
-                                    <div key={t.id} className="bg-cyan-500/5 border border-cyan-500/10 rounded-xl py-3 text-center group hover:bg-cyan-500/10 transition-all">
-                                      <p className="text-sm font-black text-cyan-500 font-mono">{t.number}</p>
-                                      <p className="text-[8px] text-gray-600 font-bold uppercase mt-1">المستوى {t.level_index}</p>
+                                    <div key={t.id} className="bg-cyan-500/5 border border-cyan-500/10 rounded-xl py-2 text-center group hover:bg-cyan-500/10 transition-all">
+                                      <p className="text-xs font-black text-cyan-500 font-mono">{t.number}</p>
+                                      <p className="text-[7px] text-gray-600 font-bold uppercase mt-1">المستوى {t.level_index}</p>
                                     </div>
                                   ))}
                                 </div>
@@ -1209,37 +1209,37 @@ export default function AdminPanel({
                 )}
 
                 {activeTab === 'settings' && (
-                  <div className="max-w-2xl mx-auto space-y-8">
-                    <div className="bg-[#14161a] border border-white/10 rounded-[2.5rem] p-8 space-y-6 shadow-xl">
-                      <div className="space-y-2">
-                        <h3 className="text-xl font-black text-white">إعدادات النظام</h3>
-                        <p className="text-xs text-gray-500">إدارة الجوانب التقنية للمنصة</p>
+                  <div className="max-w-2xl mx-auto space-y-4">
+                    <div className="bg-[#14161a] border border-white/10 rounded-3xl p-5 space-y-5 shadow-xl">
+                      <div className="space-y-1">
+                        <h3 className="text-lg font-black text-white">إعدادات النظام</h3>
+                        <p className="text-[10px] text-gray-500">إدارة الجوانب التقنية للمنصة</p>
                       </div>
 
-                      <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl space-y-4">
-                        <div className="flex items-center gap-4 text-cyan-500">
-                          <Upload size={24} />
-                          <h4 className="text-sm font-black uppercase tracking-widest">مخزن الصور (Storage)</h4>
+                      <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl space-y-3">
+                        <div className="flex items-center gap-3 text-cyan-500">
+                          <Upload size={20} />
+                          <h4 className="text-xs font-black uppercase tracking-widest">مخزن الصور (Storage)</h4>
                         </div>
-                        <p className="text-xs text-gray-400 leading-relaxed">
+                        <p className="text-[10px] text-gray-400 leading-relaxed">
                           إذا كنت تواجه مشاكل في رفع صور الإيصالات، يمكنك محاولة تهيئة مخزن الصور تلقائياً. سيقوم هذا الإجراء بإنشاء Bucket باسم "receipts" في Supabase.
                         </p>
                         <button 
                           onClick={initializeStorage}
                           disabled={isInitializingStorage}
-                          className="w-full bg-white/5 border border-white/10 text-white font-black py-4 rounded-2xl text-xs hover:bg-white/10 transition-all flex items-center justify-center gap-3"
+                          className="w-full bg-white/5 border border-white/10 text-white font-black py-3 rounded-xl text-[10px] hover:bg-white/10 transition-all flex items-center justify-center gap-2"
                         >
-                          {isInitializingStorage ? <Loader2 className="animate-spin w-5 h-5" /> : <Plus size={18} />}
+                          {isInitializingStorage ? <Loader2 className="animate-spin w-4 h-4" /> : <Plus size={16} />}
                           تهيئة مخزن الصور (Receipts Bucket)
                         </button>
                       </div>
 
-                      <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-3xl space-y-3">
-                        <div className="flex items-center gap-3 text-red-500">
-                          <ShieldCheck size={20} />
-                          <h4 className="text-xs font-black uppercase tracking-widest">ملاحظة أمنية هامة</h4>
+                      <div className="p-4 bg-red-500/5 border border-red-500/10 rounded-2xl space-y-2">
+                        <div className="flex items-center gap-2 text-red-500">
+                          <ShieldCheck size={16} />
+                          <h4 className="text-[10px] font-black uppercase tracking-widest">ملاحظة أمنية هامة</h4>
                         </div>
-                        <p className="text-xs text-gray-400 leading-relaxed">
+                        <p className="text-[10px] text-gray-400 leading-relaxed">
                           في حال فشل التهيئة التلقائية، يجب عليك الدخول إلى لوحة تحكم Supabase يدوياً وإنشاء Bucket جديد باسم <span className="text-white font-mono font-black">receipts</span> وتفعيل خيار <span className="text-white font-bold">Public Access</span> لضمان ظهور الصور للمسؤولين.
                         </p>
                       </div>

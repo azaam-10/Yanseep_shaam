@@ -233,19 +233,19 @@ export function AdminSupport() {
   );
 
   return (
-    <div className="flex h-[600px] bg-[#0f0f0f] border border-white/10 rounded-3xl overflow-hidden" dir="rtl">
+    <div className="flex h-full bg-[#0f0f0f] border border-white/10 rounded-2xl overflow-hidden" dir="rtl">
       {/* Sidebar - Chat List */}
-      <div className={`w-full md:w-[350px] border-l border-white/10 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
-        <div className="p-4 border-bottom border-white/10 space-y-4">
-          <h3 className="text-white font-black text-lg">محادثات الدعم</h3>
+      <div className={`w-full md:w-[320px] border-l border-white/10 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
+        <div className="p-3 border-bottom border-white/10 space-y-3">
+          <h3 className="text-white font-black text-base">محادثات الدعم</h3>
           <div className="relative group">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 w-3.5 h-3.5" />
             <input 
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="البحث عن مستخدم..."
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pr-10 pl-4 text-sm text-white focus:outline-none focus:border-cyan-500/50 transition-all"
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-2 pr-9 pl-3 text-xs text-white focus:outline-none focus:border-cyan-500/50 transition-all"
             />
           </div>
         </div>
@@ -253,38 +253,38 @@ export function AdminSupport() {
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <div className="h-full flex items-center justify-center">
-              <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+              <Loader2 className="w-6 h-6 text-cyan-500 animate-spin" />
             </div>
           ) : filteredChats.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-4 opacity-50">
-              <MessageCircle className="w-12 h-12 text-gray-500 mb-2" />
-              <p className="text-xs text-gray-400">لا توجد محادثات نشطة</p>
+              <MessageCircle className="w-10 h-10 text-gray-500 mb-2" />
+              <p className="text-[10px] text-gray-400">لا توجد محادثات نشطة</p>
             </div>
           ) : (
             filteredChats.map((chat) => (
               <button 
                 key={chat.id}
                 onClick={() => setActiveChat(chat)}
-                className={`w-full p-4 flex items-center gap-4 hover:bg-white/5 transition-colors border-b border-white/5 relative ${
+                className={`w-full p-3 flex items-center gap-3 hover:bg-white/5 transition-colors border-b border-white/5 relative ${
                   activeChat?.id === chat.id ? 'bg-white/10' : ''
                 }`}
               >
-                <div className="w-12 h-12 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-black font-black">
+                <div className="w-10 h-10 bg-gradient-to-tr from-cyan-500 to-blue-600 rounded-full flex items-center justify-center text-black font-black text-xs">
                   {chat.profiles.first_name[0]}
                 </div>
                 <div className="flex-1 text-right overflow-hidden">
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className="text-white font-bold text-sm truncate">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <h4 className="text-white font-bold text-xs truncate">
                       {chat.profiles.first_name} {chat.profiles.last_name}
                     </h4>
-                    <span className="text-[10px] text-gray-500">
+                    <span className="text-[8px] text-gray-500">
                       {new Date(chat.last_message_at).toLocaleTimeString('ar-SY', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 truncate">{chat.last_message || 'ابدأ المحادثة'}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{chat.last_message || 'ابدأ المحادثة'}</p>
                 </div>
                 {chat.unread_count_admin > 0 && (
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center text-[10px] text-black font-bold">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center text-[8px] text-black font-bold">
                     {chat.unread_count_admin}
                   </div>
                 )}
@@ -306,31 +306,31 @@ export function AdminSupport() {
         ) : (
           <>
             {/* Chat Header */}
-            <div className="p-4 bg-[#0f0f0f] border-b border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setActiveChat(null)} className="md:hidden p-2 text-gray-400">
-                  <ArrowLeft className="w-5 h-5" />
+            <div className="p-3 bg-[#0f0f0f] border-b border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setActiveChat(null)} className="md:hidden p-1.5 text-gray-400">
+                  <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="w-10 h-10 bg-cyan-500 rounded-full flex items-center justify-center text-black font-black">
+                <div className="w-8 h-8 bg-cyan-500 rounded-full flex items-center justify-center text-black font-black text-xs">
                   {activeChat.profiles.first_name[0]}
                 </div>
                 <div>
-                  <h4 className="text-white font-bold text-sm">
+                  <h4 className="text-white font-bold text-xs">
                     {activeChat.profiles.first_name} {activeChat.profiles.last_name}
                   </h4>
-                  <p className="text-cyan-500 text-[10px]">{activeChat.profiles.email}</p>
+                  <p className="text-cyan-500 text-[8px]">{activeChat.profiles.email}</p>
                 </div>
               </div>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.map((msg) => (
                 <div 
                   key={msg.id}
                   className={`flex ${msg.is_admin_reply ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`max-w-[70%] rounded-2xl p-4 ${
+                  <div className={`max-w-[85%] rounded-xl p-3 ${
                     msg.is_admin_reply 
                       ? 'bg-cyan-500 text-black rounded-tl-none font-bold' 
                       : 'bg-white/5 text-white rounded-tr-none'
@@ -339,16 +339,16 @@ export function AdminSupport() {
                       <img 
                         src={msg.image_url} 
                         alt="Chat" 
-                        className="rounded-lg mb-2 max-w-full cursor-pointer"
+                        className="rounded-lg mb-1.5 max-w-full cursor-pointer"
                         onClick={() => window.open(msg.image_url!, '_blank')}
                       />
                     )}
-                    {msg.content && <p className="text-sm leading-relaxed">{msg.content}</p>}
-                    <div className={`text-[9px] mt-1 flex items-center gap-1 ${
+                    {msg.content && <p className="text-xs leading-relaxed">{msg.content}</p>}
+                    <div className={`text-[8px] mt-1 flex items-center gap-1 ${
                       msg.is_admin_reply ? 'text-black/50' : 'text-gray-500'
                     }`}>
                       {new Date(msg.created_at).toLocaleTimeString('ar-SY', { hour: '2-digit', minute: '2-digit' })}
-                      {msg.is_admin_reply && <CheckCheck className="w-3 h-3" />}
+                      {msg.is_admin_reply && <CheckCheck className="w-2.5 h-2.5" />}
                     </div>
                   </div>
                 </div>
@@ -357,7 +357,7 @@ export function AdminSupport() {
             </div>
 
             {/* Input */}
-            <form onSubmit={handleSendMessage} className="p-4 bg-[#0f0f0f] border-t border-white/10 flex items-center gap-3">
+            <form onSubmit={handleSendMessage} className="p-3 bg-[#0f0f0f] border-t border-white/10 flex items-center gap-2">
               <input 
                 type="file" 
                 ref={fileInputRef}
@@ -369,23 +369,23 @@ export function AdminSupport() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="p-3 text-gray-400 hover:text-cyan-500 transition-colors bg-white/5 rounded-xl"
+                className="p-2.5 text-gray-400 hover:text-cyan-500 transition-colors bg-white/5 rounded-xl"
               >
-                {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
               </button>
               <input 
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder="اكتب ردك هنا..."
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:outline-none focus:border-cyan-500/50 transition-all"
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl py-2.5 px-3 text-xs text-white focus:outline-none focus:border-cyan-500/50 transition-all"
               />
               <button 
                 type="submit"
                 disabled={sending || (!newMessage.trim() && !uploading)}
-                className="p-3 bg-cyan-500 text-black rounded-xl hover:bg-cyan-400 transition-colors disabled:opacity-50"
+                className="p-2.5 bg-cyan-500 text-black rounded-xl hover:bg-cyan-400 transition-colors disabled:opacity-50"
               >
-                {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </button>
             </form>
           </>
