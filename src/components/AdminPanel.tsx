@@ -99,24 +99,32 @@ export default function AdminPanel({
   const initializeStorage = async () => {
     setIsInitializingStorage(true);
     try {
-      const { error } = await supabase.storage.createBucket('receipts', {
+      // Initialize Receipts Bucket
+      const { error: receiptsError } = await supabase.storage.createBucket('receipts', {
         public: true,
         allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg'],
         fileSizeLimit: 5242880 // 5MB
       });
       
-      if (error) {
-        if (error.message.includes('already exists')) {
-          addNotification('مخزن الصور موجود بالفعل');
-        } else {
-          throw error;
-        }
-      } else {
-        addNotification('تم إنشاء مخزن الصور "receipts" بنجاح');
+      if (receiptsError && !receiptsError.message.includes('already exists')) {
+        throw receiptsError;
       }
+
+      // Initialize Support Bucket
+      const { error: supportError } = await supabase.storage.createBucket('support', {
+        public: true,
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'],
+        fileSizeLimit: 10485760 // 10MB
+      });
+
+      if (supportError && !supportError.message.includes('already exists')) {
+        throw supportError;
+      }
+      
+      addNotification('تم تهيئة مخازن الصور (receipts & support) بنجاح');
     } catch (err: any) {
       console.error('Storage Init Error:', err);
-      addNotification('فشل الإنشاء التلقائي. يرجى إنشاء مخزن باسم receipts يدوياً في Supabase', 'error');
+      addNotification('فشل التهيئة التلقائية. يرجى التأكد من وجود مخازن باسم receipts و support يدوياً', 'error');
     } finally {
       setIsInitializingStorage(false);
     }
@@ -1222,7 +1230,7 @@ export default function AdminPanel({
                           <h4 className="text-xs font-black uppercase tracking-widest">مخزن الصور (Storage)</h4>
                         </div>
                         <p className="text-[10px] text-gray-400 leading-relaxed">
-                          إذا كنت تواجه مشاكل في رفع صور الإيصالات، يمكنك محاولة تهيئة مخزن الصور تلقائياً. سيقوم هذا الإجراء بإنشاء Bucket باسم "receipts" في Supabase.
+                          إذا كنت تواجه مشاكل في رفع صور الإيصالات أو صور الدردشة، يمكنك محاولة تهيئة مخازن الصور تلقائياً. سيقوم هذا الإجراء بإنشاء Buckets باسم "receipts" و "support" في Supabase.
                         </p>
                         <button 
                           onClick={initializeStorage}
@@ -1230,7 +1238,7 @@ export default function AdminPanel({
                           className="w-full bg-white/5 border border-white/10 text-white font-black py-3 rounded-xl text-[10px] hover:bg-white/10 transition-all flex items-center justify-center gap-2"
                         >
                           {isInitializingStorage ? <Loader2 className="animate-spin w-4 h-4" /> : <Plus size={16} />}
-                          تهيئة مخزن الصور (Receipts Bucket)
+                          تهيئة مخازن الصور (Receipts & Support Buckets)
                         </button>
                       </div>
 
@@ -1240,7 +1248,13 @@ export default function AdminPanel({
                           <h4 className="text-[10px] font-black uppercase tracking-widest">ملاحظة أمنية هامة</h4>
                         </div>
                         <p className="text-[10px] text-gray-400 leading-relaxed">
-                          في حال فشل التهيئة التلقائية، يجب عليك الدخول إلى لوحة تحكم Supabase يدوياً وإنشاء Bucket جديد باسم <span className="text-white font-mono font-black">receipts</span> وتفعيل خيار <span className="text-white font-bold">Public Access</span> لضمان ظهور الصور للمسؤولين.
+                          في حال فشل التهيئة التلقائية، يجب عليك الدخول إلى لوحة تحكم Supabase يدوياً وإنشاء Buckets جديدة بالأسماء التالية:
+                          <br />
+                          1. <span className="text-white font-mono font-black">receipts</span>
+                          <br />
+                          2. <span className="text-white font-mono font-black">support</span>
+                          <br />
+                          وتفعيل خيار <span className="text-white font-bold">Public Access</span> لكل منهما لضمان ظهور الصور بشكل صحيح.
                         </p>
                       </div>
                     </div>

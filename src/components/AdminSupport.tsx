@@ -186,6 +186,12 @@ export function AdminSupport() {
     const file = e.target.files?.[0];
     if (!file || !activeChat) return;
 
+    // Check file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('حجم الصورة كبير جداً. الحد الأقصى هو 10 ميجابايت');
+      return;
+    }
+
     setUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
@@ -220,10 +226,12 @@ export function AdminSupport() {
         })
         .eq('id', activeChat.id);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Image Upload Error:', err);
+      alert('فشل رفع الصورة: ' + (err.message || 'حدث خطأ غير متوقع'));
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 

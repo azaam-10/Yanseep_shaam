@@ -173,6 +173,12 @@ export function SupportChat({ userId, onClose }: SupportChatProps) {
     const file = e.target.files?.[0];
     if (!file || !chatId) return;
 
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('حجم الصورة كبير جداً. الحد الأقصى هو 5 ميجابايت');
+      return;
+    }
+
     setUploading(true);
     try {
       const fileExt = file.name.split('.').pop();
@@ -207,10 +213,12 @@ export function SupportChat({ userId, onClose }: SupportChatProps) {
         })
         .eq('id', chatId);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error('Image Upload Error:', err);
+      alert('فشل رفع الصورة: ' + (err.message || 'حدث خطأ غير متوقع'));
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
